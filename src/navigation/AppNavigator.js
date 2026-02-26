@@ -4,6 +4,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
 import OnboardingScreen from '../screens/OnboardingScreen';
 import ActivityDetailScreen from '../screens/ActivityDetailScreen';
+import PackingListScreen from '../screens/PackingListScreen';
 import MainTabs from './MainTabs';
 
 const Stack = createNativeStackNavigator();
@@ -12,6 +13,7 @@ export const Routes = {
   ONBOARDING: 'Onboarding',
   MAIN: 'Main',
   ACTIVITY_DETAIL: 'ActivityDetail',
+  PACKING_LIST: 'PackingList',
 };
 
 export default function AppNavigator() {
@@ -24,21 +26,16 @@ export default function AppNavigator() {
           contentStyle: { backgroundColor: '#F5F0E8' },
         }}
       >
-        {/* Onboarding — full screen entry */}
         <Stack.Screen
           name={Routes.ONBOARDING}
           component={OnboardingScreen}
           options={{ animation: 'fade' }}
         />
-
-        {/* Main app with bottom tabs */}
         <Stack.Screen
           name={Routes.MAIN}
           component={MainTabs}
           options={{ animation: 'fade_from_bottom' }}
         />
-
-        {/* Activity detail — bottom sheet modal */}
         <Stack.Screen
           name={Routes.ACTIVITY_DETAIL}
           component={ActivityDetailScreen}
@@ -47,6 +44,11 @@ export default function AppNavigator() {
             animation: 'slide_from_bottom',
             contentStyle: { backgroundColor: 'transparent' },
           }}
+        />
+        <Stack.Screen
+          name={Routes.PACKING_LIST}
+          component={PackingListScreen}
+          options={{ animation: 'slide_from_right' }}
         />
       </Stack.Navigator>
     </NavigationContainer>
