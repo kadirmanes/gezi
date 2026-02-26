@@ -1,0 +1,240 @@
+import React, { useState } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  Animated,
+} from 'react-native';
+import { Colors } from '../constants/colors';
+import { Radius, Shadow, Spacing, Typography } from '../constants/theme';
+
+// Tag color map
+const TAG_COLORS = {
+  Mola:       { bg: '#E8F5E9', text: '#4A7C59' },
+  Doğa:       { bg: '#E0F2F1', text: '#00695C' },
+  Yemek:      { bg: '#FFF8E1', text: '#E65100' },
+  Kamping:    { bg: '#E3F2FD', text: '#1565C0' },
+  Akşam:      { bg: '#EDE7F6', text: '#4527A0' },
+  Aktivite:   { bg: '#FCE4EC', text: '#AD1457' },
+  Konaklama:  { bg: '#E8F5E9', text: '#2E7D32' },
+  Kültür:     { bg: '#F3E5F5', text: '#6A1B9A' },
+  Tur:        { bg: '#E8EAF6', text: '#283593' },
+  Premium:    { bg: '#FFF8E1', text: '#FF6F00' },
+  Huzur:      { bg: '#E0F2F1', text: '#004D40' },
+  Sabah:      { bg: '#FFF9C4', text: '#F57F17' },
+  Gastronomi: { bg: '#FBE9E7', text: '#BF360C' },
+  Macera:     { bg: '#FCE4EC', text: '#880E4F' },
+  Keşif:      { bg: '#E8EAF6', text: '#1A237E' },
+  default:    { bg: '#F5F5F5', text: '#616161' },
+};
+
+function ActivityRow({ activity, isLast }) {
+  const tagStyle = TAG_COLORS[activity.tag] || TAG_COLORS.default;
+
+  return (
+    <View style={styles.activityRow}>
+      {/* Timeline line */}
+      <View style={styles.timelineCol}>
+        <View style={styles.timelineDot} />
+        {!isLast && <View style={styles.timelineLine} />}
+      </View>
+
+      {/* Content */}
+      <View style={styles.activityContent}>
+        <View style={styles.activityHeader}>
+          <Text style={styles.activityTime}>{activity.time}</Text>
+          <View style={[styles.tag, { backgroundColor: tagStyle.bg }]}>
+            <Text style={[styles.tagText, { color: tagStyle.text }]}>
+              {activity.tag}
+            </Text>
+          </View>
+          {activity.cost && (
+            <View style={styles.costBadge}>
+              <Text style={styles.costText}>{activity.cost}</Text>
+            </View>
+          )}
+        </View>
+        <Text style={styles.activityTitle}>{activity.title}</Text>
+      </View>
+    </View>
+  );
+}
+
+export default function DayCard({ dayPlan, isExpanded: initialExpanded = false }) {
+  const [expanded, setExpanded] = useState(initialExpanded);
+
+  const { day, title, subtitle, activities = [], estimatedCost } = dayPlan;
+
+  return (
+    <View style={[styles.card, Shadow.sm]}>
+      {/* Day header — tap to expand */}
+      <TouchableOpacity
+        style={styles.cardHeader}
+        onPress={() => setExpanded(!expanded)}
+        activeOpacity={0.75}
+      >
+        <View style={styles.dayBadge}>
+          <Text style={styles.dayNumber}>{day}</Text>
+        </View>
+        <View style={styles.headerText}>
+          <Text style={styles.dayTitle} numberOfLines={1}>{title}</Text>
+          <Text style={styles.daySubtitle}>{subtitle}</Text>
+        </View>
+        <View style={styles.headerRight}>
+          <Text style={styles.costEstimate}>
+            ₺{estimatedCost?.toLocaleString('tr-TR')}
+          </Text>
+          <Text style={styles.expandIcon}>{expanded ? '▲' : '▼'}</Text>
+        </View>
+      </TouchableOpacity>
+
+      {/* Activities — collapsible */}
+      {expanded && (
+        <View style={styles.activitiesContainer}>
+          <View style={styles.divider} />
+          {activities.map((activity, idx) => (
+            <ActivityRow
+              key={`${day}-${idx}`}
+              activity={activity}
+              isLast={idx === activities.length - 1}
+            />
+          ))}
+        </View>
+      )}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  card: {
+    backgroundColor: Colors.surface,
+    borderRadius: Radius.xl,
+    marginHorizontal: Spacing.md,
+    marginBottom: Spacing.md,
+    overflow: 'hidden',
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: Spacing.md,
+    gap: Spacing.sm,
+  },
+  dayBadge: {
+    width: 44,
+    height: 44,
+    borderRadius: Radius.md,
+    backgroundColor: Colors.primaryFaded,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  dayNumber: {
+    fontSize: Typography.size.lg,
+    fontWeight: Typography.weight.extrabold,
+    color: Colors.primary,
+  },
+  headerText: {
+    flex: 1,
+    gap: 2,
+  },
+  dayTitle: {
+    fontSize: Typography.size.base,
+    fontWeight: Typography.weight.bold,
+    color: Colors.textPrimary,
+  },
+  daySubtitle: {
+    fontSize: Typography.size.xs,
+    color: Colors.textTertiary,
+  },
+  headerRight: {
+    alignItems: 'flex-end',
+    gap: 4,
+  },
+  costEstimate: {
+    fontSize: Typography.size.sm,
+    fontWeight: Typography.weight.semibold,
+    color: Colors.primary,
+  },
+  expandIcon: {
+    fontSize: 10,
+    color: Colors.textTertiary,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: Colors.borderLight,
+    marginHorizontal: Spacing.md,
+  },
+  activitiesContainer: {
+    paddingBottom: Spacing.sm,
+  },
+  activityRow: {
+    flexDirection: 'row',
+    paddingHorizontal: Spacing.md,
+    paddingTop: Spacing.sm,
+    minHeight: 60,
+  },
+  timelineCol: {
+    width: 20,
+    alignItems: 'center',
+    paddingTop: 4,
+  },
+  timelineDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: Colors.primary,
+    borderWidth: 2,
+    borderColor: Colors.primaryFaded,
+  },
+  timelineLine: {
+    flex: 1,
+    width: 2,
+    backgroundColor: Colors.borderLight,
+    marginTop: 4,
+  },
+  activityContent: {
+    flex: 1,
+    paddingLeft: Spacing.sm,
+    paddingBottom: Spacing.sm,
+  },
+  activityHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    flexWrap: 'wrap',
+    marginBottom: 4,
+  },
+  activityTime: {
+    fontSize: Typography.size.xs,
+    fontWeight: Typography.weight.bold,
+    color: Colors.textSecondary,
+    minWidth: 42,
+  },
+  tag: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: Radius.full,
+  },
+  tagText: {
+    fontSize: 10,
+    fontWeight: Typography.weight.semibold,
+  },
+  costBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: Radius.full,
+    backgroundColor: Colors.accentFaded,
+  },
+  costText: {
+    fontSize: 10,
+    fontWeight: Typography.weight.bold,
+    color: Colors.accentDark,
+  },
+  activityTitle: {
+    fontSize: Typography.size.sm,
+    fontWeight: Typography.weight.medium,
+    color: Colors.textPrimary,
+    lineHeight: 20,
+  },
+});

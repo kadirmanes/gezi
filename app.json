@@ -1,0 +1,33 @@
+{
+  "expo": {
+    "name": "NomadWise AI",
+    "slug": "nomadwise-ai",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#F5F0E8"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.nomadwise.ai"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#F5F0E8"
+      },
+      "package": "com.nomadwise.ai"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro"
+    },
+    "plugins": [
+      "expo-router"
+    ]
+  }
+}
