@@ -20,6 +20,16 @@ import ExpenseModal from '../components/ExpenseModal';
 import { useTrip } from '../context/TripContext';
 import { Routes } from '../navigation/routes';
 
+// ─── Helpers ─────────────────────────────────────────────────────────────
+
+const TR_MONTHS = ['Oca','Şub','Mar','Nis','May','Haz','Tem','Ağu','Eyl','Eki','Kas','Ara'];
+
+function _fmtDate(isoStr) {
+  if (!isoStr) return '';
+  const d = new Date(isoStr);
+  return `${d.getDate()} ${TR_MONTHS[d.getMonth()]}`;
+}
+
 // ─── Constants ────────────────────────────────────────────────────────────
 
 const ACCOM_META = {
@@ -147,7 +157,9 @@ export default function DashboardScreen({ navigation }) {
           <View style={styles.topBar}>
             <View>
               <Text style={styles.topGreeting}>Gezi Planın 🗓️</Text>
-              <Text style={styles.topDest}>{preferences.destination}</Text>
+              <Text style={styles.topDest} numberOfLines={1}>
+                {preferences.startLocation ? `${preferences.startLocation} → ${preferences.destination}` : preferences.destination}
+              </Text>
             </View>
             <View style={styles.topActions}>
               <TouchableOpacity
@@ -171,13 +183,38 @@ export default function DashboardScreen({ navigation }) {
         {/* ── Hero Card ── */}
         <FadeSlide delay={80}>
           <View style={[styles.heroCard, Shadow.md]}>
-            <View style={styles.heroTop}>
-              <View>
-                <Text style={styles.destLabel}>Hedef</Text>
-                <Text style={styles.destName}>{preferences.destination}</Text>
+            {/* Route: start → end */}
+            <View style={styles.routeRow}>
+              <View style={styles.routePoint}>
+                <Text style={styles.routePointLabel}>NEREDEN</Text>
+                <Text style={styles.routePointName} numberOfLines={1}>
+                  {preferences.startLocation || preferences.destination}
+                </Text>
+              </View>
+              <View style={styles.routeArrow}>
+                <View style={styles.routeArrowLine} />
+                <Text style={styles.routeArrowHead}>▶</Text>
+              </View>
+              <View style={[styles.routePoint, { alignItems: 'flex-end' }]}>
+                <Text style={styles.routePointLabel}>NEREYE</Text>
+                <Text style={styles.routePointName} numberOfLines={1}>
+                  {preferences.destination}
+                </Text>
               </View>
               <Text style={styles.heroIcon}>{accomMeta.icon}</Text>
             </View>
+
+            {/* Date range */}
+            {preferences.startDate && preferences.endDate && (
+              <View style={styles.dateRow}>
+                <Text style={styles.dateText}>
+                  📅 {_fmtDate(preferences.startDate)} – {_fmtDate(preferences.endDate)}
+                </Text>
+                <View style={styles.daysBadge}>
+                  <Text style={styles.daysBadgeText}>{preferences.days} gün</Text>
+                </View>
+              </View>
+            )}
 
             <View style={styles.heroBadges}>
               <AccommodationBadge type={preferences.accommodationType} size="lg" />
@@ -380,6 +417,71 @@ const styles = StyleSheet.create({
   },
   iconBtnText: { fontSize: 18 },
 
+  // Route row in hero card
+  routeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: Spacing.md,
+    gap: Spacing.xs,
+  },
+  routePoint: { flex: 1 },
+  routePointLabel: {
+    fontSize: 9,
+    color: Colors.textTertiary,
+    fontWeight: Typography.weight.bold,
+    letterSpacing: 0.8,
+    marginBottom: 2,
+  },
+  routePointName: {
+    fontSize: Typography.size.md,
+    fontWeight: Typography.weight.extrabold,
+    color: Colors.textPrimary,
+  },
+  routeArrow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: Spacing.xs,
+  },
+  routeArrowLine: {
+    width: 20,
+    height: 1.5,
+    backgroundColor: Colors.primary,
+  },
+  routeArrowHead: {
+    fontSize: 8,
+    color: Colors.primary,
+    marginLeft: -2,
+  },
+  heroIcon: { fontSize: 32, marginLeft: Spacing.xs },
+
+  // Date row
+  dateRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    marginBottom: Spacing.md,
+    backgroundColor: Colors.background,
+    borderRadius: Radius.lg,
+    padding: Spacing.sm,
+  },
+  dateText: {
+    fontSize: Typography.size.xs,
+    color: Colors.textSecondary,
+    fontWeight: Typography.weight.medium,
+    flex: 1,
+  },
+  daysBadge: {
+    backgroundColor: Colors.primaryFaded,
+    borderRadius: Radius.full,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+  },
+  daysBadgeText: {
+    fontSize: Typography.size.xs,
+    color: Colors.primary,
+    fontWeight: Typography.weight.bold,
+  },
+
   // Hero card
   heroCard: {
     backgroundColor: Colors.surface,
@@ -388,27 +490,6 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.md,
     padding: Spacing.md + 4,
   },
-  heroTop: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: Spacing.md,
-  },
-  destLabel: {
-    fontSize: Typography.size.xs,
-    color: Colors.textTertiary,
-    fontWeight: Typography.weight.medium,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-    marginBottom: 4,
-  },
-  destName: {
-    fontSize: Typography.size.xxl,
-    fontWeight: Typography.weight.extrabold,
-    color: Colors.textPrimary,
-    letterSpacing: -0.5,
-  },
-  heroIcon: { fontSize: 36 },
   heroBadges: {
     flexDirection: 'row',
     alignItems: 'center',

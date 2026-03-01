@@ -13,7 +13,7 @@ import MapView, { Marker, Polyline, PROVIDER_DEFAULT } from 'react-native-maps';
 import { Colors } from '../constants/colors';
 import { Radius, Shadow, Spacing, Typography } from '../constants/theme';
 import { useTrip } from '../context/TripContext';
-import { getDestinationCoords, generateWaypoints } from '../utils/geocoder';
+import { getDestinationCoords, generateRouteWaypoints, generateWaypoints } from '../utils/geocoder';
 
 const { height: SCREEN_H } = Dimensions.get('window');
 const MAP_HEIGHT = SCREEN_H * 0.58;
@@ -70,14 +70,23 @@ export default function MapScreen() {
   const [selectedDay, setSelectedDay] = useState(1);
   const [selectedActivity, setSelectedActivity] = useState(null);
 
-  // Fallback if no trip yet
-  const destination = preferences?.destination || 'Türkiye';
-  const days = tripData?.days || [];
+  const destination   = preferences?.destination   || 'Türkiye';
+  const startLocation = preferences?.startLocation || destination;
+  const days          = tripData?.days || [];
+
+  // Use stored day coordinates when available (from routeGenerator),
+  // otherwise fall back to corridor-based waypoint generation.
   const centerCoords = useMemo(() => getDestinationCoords(destination), [destination]);
-  const waypoints = useMemo(
-    () => generateWaypoints(destination, Math.max(days.length, 1)),
-    [destination, days.length]
-  );
+  const waypoints = useMemo(() => {
+    if (days.length > 0 && days[0].coordinate) {
+      return days.map((d) => ({
+        day:        d.day,
+        name:       d.location || d.title,
+        coordinate: d.coordinate,
+      }));
+    }
+    return generateRouteWaypoints(startLocation, destination, Math.max(days.length, 1));
+  }, [startLocation, destination, days]);
 
   const currentWaypoint = waypoints.find((w) => w.day === selectedDay) || waypoints[0];
   const currentDayPlan = days.find((d) => d.day === selectedDay);
@@ -184,9 +193,11 @@ export default function MapScreen() {
           })}
         </MapView>
 
-        {/* Overlay — destination chip */}
+        {/* Overlay — route chip */}
         <View style={[styles.destChip, Shadow.sm]}>
-          <Text style={styles.destChipText}>📍 {destination}</Text>
+          <Text style={styles.destChipText} numberOfLines={1}>
+            {startLocation !== destination ? `${startLocation} → ${destination}` : `📍 ${destination}`}
+          </Text>
         </View>
 
         {/* Selected activity callout */}

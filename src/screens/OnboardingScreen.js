@@ -1,9 +1,9 @@
 /**
- * OnboardingScreen — Animated 5-step wizard.
- * Steps: Destination → Days → Accommodation → Budget → Interests
+ * OnboardingScreen — 6-step wizard.
+ * Steps: Nereden → Nereye → Tarihler → Konaklama → Bütçe → İlgi Alanları
  */
 
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -24,6 +24,7 @@ import { Routes } from '../navigation/routes';
 import { useTrip } from '../context/TripContext';
 
 const { width: W } = Dimensions.get('window');
+const CELL_SIZE = Math.floor((W - 32) / 7);
 
 // ─── Static options ────────────────────────────────────────────────────────
 
@@ -48,26 +49,57 @@ const INTEREST_OPTIONS = [
   { id: 'fotograf',   label: '📸 Fotoğrafçılık' },
 ];
 
-const DAY_OPTIONS = [1, 2, 3, 4, 5, 7, 10, 14];
+const POPULAR_STARTS = ['İstanbul', 'Ankara', 'İzmir', 'Bursa', 'Antalya', 'Adana'];
+const POPULAR_ENDS   = ['Kapadokya', 'Bodrum', 'Rize', 'Trabzon', 'Pamukkale', 'Mardin'];
+
+const TR_MONTHS     = ['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
+const TR_DAYS_SHORT = ['Pt','Sa','Ça','Pe','Cu','Ct','Pz'];
 
 const STEPS = [
-  { key: 'destination', title: 'Nereye?',       subtitle: 'Şehir, bölge veya ülke gir', emoji: '🌍' },
-  { key: 'days',        title: 'Kaç gün?',      subtitle: 'Toplam seyahat süren',        emoji: '📅' },
-  { key: 'accom',       title: 'Konaklama',     subtitle: 'Seyahat stilini seç',         emoji: '🏕️' },
-  { key: 'budget',      title: 'Bütçe',         subtitle: 'Harcama tercihini belirle',   emoji: '💰' },
-  { key: 'interests',   title: 'İlgi Alanları', subtitle: 'Birden fazla seçebilirsin',   emoji: '✨' },
+  { key: 'startLocation', title: 'Nereden?',     subtitle: 'Yolculuğun başlangıç noktası', emoji: '🚩' },
+  { key: 'destination',   title: 'Nereye?',       subtitle: 'Hedef şehir veya bölge',       emoji: '🏁' },
+  { key: 'dates',         title: 'Ne Zaman?',     subtitle: 'Başlangıç ve bitiş tarihi',    emoji: '📅' },
+  { key: 'accom',         title: 'Konaklama',     subtitle: 'Seyahat stilini seç',          emoji: '🏕️' },
+  { key: 'budget',        title: 'Bütçe',         subtitle: 'Harcama tercihini belirle',    emoji: '💰' },
+  { key: 'interests',     title: 'İlgi Alanları', subtitle: 'Birden fazla seçebilirsin',    emoji: '✨' },
 ];
 
-// ─── Step Content Components ───────────────────────────────────────────────
+// ─── Calendar Helpers ──────────────────────────────────────────────────────
 
-function StepDestination({ value, onChange }) {
+function getDaysInMonth(year, month) {
+  return new Date(year, month + 1, 0).getDate();
+}
+
+function getFirstDayMon(year, month) {
+  return (new Date(year, month, 1).getDay() + 6) % 7;
+}
+
+function isSameDay(a, b) {
+  if (!a || !b) return false;
+  return a.getFullYear() === b.getFullYear() &&
+         a.getMonth()    === b.getMonth()    &&
+         a.getDate()     === b.getDate();
+}
+
+function isInRange(date, start, end) {
+  if (!date || !start || !end) return false;
+  return date > start && date < end;
+}
+
+function toDateOnly(d) {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+
+// ─── Step Components ───────────────────────────────────────────────────────
+
+function LocationStep({ value, onChange, suggestions, placeholder }) {
   return (
     <View style={sStyles.stepContent}>
       <View style={[sStyles.inputWrapper, Shadow.sm]}>
         <Text style={sStyles.inputEmoji}>📍</Text>
         <TextInput
           style={sStyles.input}
-          placeholder="Kapadokya, Bodrum, Paris..."
+          placeholder={placeholder}
           placeholderTextColor={Colors.textTertiary}
           value={value}
           onChangeText={onChange}
@@ -75,9 +107,14 @@ function StepDestination({ value, onChange }) {
           returnKeyType="done"
           autoCorrect={false}
         />
+        {value.length > 0 && (
+          <TouchableOpacity onPress={() => onChange('')} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+            <Text style={{ color: Colors.textTertiary, fontSize: 16 }}>✕</Text>
+          </TouchableOpacity>
+        )}
       </View>
       <View style={sStyles.suggestions}>
-        {['Kapadokya', 'Bodrum', 'İstanbul', 'Antalya', 'Pamukkale', 'Rize'].map((s) => (
+        {suggestions.map((s) => (
           <TouchableOpacity key={s} style={sStyles.suggestionChip} onPress={() => onChange(s)} activeOpacity={0.75}>
             <Text style={sStyles.suggestionText}>{s}</Text>
           </TouchableOpacity>
@@ -87,25 +124,145 @@ function StepDestination({ value, onChange }) {
   );
 }
 
-function StepDays({ value, onChange }) {
+function StepDates({ startDate, endDate, onDatesChange }) {
+  const today = toDateOnly(new Date());
+  const [viewYear, setViewYear]   = useState(today.getFullYear());
+  const [viewMonth, setViewMonth] = useState(today.getMonth());
+
+  const daysInMonth = getDaysInMonth(viewYear, viewMonth);
+  const firstDayMon = getFirstDayMon(viewYear, viewMonth);
+  const totalCells  = Math.ceil((firstDayMon + daysInMonth) / 7) * 7;
+
+  const handleDayPress = (day) => {
+    const pressed = new Date(viewYear, viewMonth, day);
+    if (pressed < today) return;
+
+    if (!startDate || (startDate && endDate)) {
+      onDatesChange(pressed, null);
+    } else {
+      if (pressed < startDate) {
+        onDatesChange(pressed, null);
+      } else if (isSameDay(pressed, startDate)) {
+        onDatesChange(null, null);
+      } else {
+        onDatesChange(startDate, pressed);
+      }
+    }
+  };
+
+  const prevMonth = () => {
+    if (viewMonth === 0) { setViewYear((y) => y - 1); setViewMonth(11); }
+    else setViewMonth((m) => m - 1);
+  };
+
+  const nextMonth = () => {
+    if (viewMonth === 11) { setViewYear((y) => y + 1); setViewMonth(0); }
+    else setViewMonth((m) => m + 1);
+  };
+
+  const computedDays = startDate && endDate
+    ? Math.max(1, Math.round((endDate - startDate) / (1000 * 60 * 60 * 24)) + 1)
+    : null;
+
+  const cells = Array.from({ length: totalCells }, (_, i) => {
+    const dayNum = i - firstDayMon + 1;
+    return (dayNum < 1 || dayNum > daysInMonth) ? null : dayNum;
+  });
+
   return (
-    <View style={sStyles.stepContent}>
-      <View style={sStyles.selectedDayBox}>
-        <Text style={sStyles.selectedDayNum}>{value}</Text>
-        <Text style={sStyles.selectedDayLabel}>gün</Text>
+    <View style={sStyles.calendarWrap}>
+      {/* Month navigation */}
+      <View style={sStyles.calMonthRow}>
+        <TouchableOpacity style={sStyles.calNavBtn} onPress={prevMonth} activeOpacity={0.7}>
+          <Text style={sStyles.calNavText}>‹</Text>
+        </TouchableOpacity>
+        <Text style={sStyles.calMonthLabel}>{TR_MONTHS[viewMonth]} {viewYear}</Text>
+        <TouchableOpacity style={sStyles.calNavBtn} onPress={nextMonth} activeOpacity={0.7}>
+          <Text style={sStyles.calNavText}>›</Text>
+        </TouchableOpacity>
       </View>
-      <View style={sStyles.daysGrid}>
-        {DAY_OPTIONS.map((d) => (
-          <TouchableOpacity
-            key={d}
-            style={[sStyles.dayBtn, value === d && { backgroundColor: Colors.primary, borderColor: Colors.primary }]}
-            onPress={() => onChange(d)}
-            activeOpacity={0.8}
-          >
-            <Text style={[sStyles.dayBtnText, value === d && { color: '#FFF', fontWeight: '700' }]}>{d}g</Text>
-          </TouchableOpacity>
+
+      {/* Day name headers */}
+      <View style={sStyles.calDayHeaders}>
+        {TR_DAYS_SHORT.map((d) => (
+          <View key={d} style={[sStyles.calCell, { height: 28 }]}>
+            <Text style={sStyles.calDayHeader}>{d}</Text>
+          </View>
         ))}
       </View>
+
+      {/* Grid */}
+      <View style={sStyles.calGrid}>
+        {cells.map((day, idx) => {
+          if (!day) return <View key={`e-${idx}`} style={sStyles.calCell} />;
+
+          const cellDate = new Date(viewYear, viewMonth, day);
+          const isPast   = cellDate < today;
+          const isStart  = isSameDay(cellDate, startDate);
+          const isEnd    = isSameDay(cellDate, endDate);
+          const inRange  = isInRange(cellDate, startDate, endDate);
+          const isToday  = isSameDay(cellDate, today);
+
+          let cellBg     = 'transparent';
+          let textColor  = isPast ? Colors.textTertiary : Colors.textPrimary;
+          let fontWeight = Typography.weight.medium;
+          let dotStyle   = null;
+
+          if (inRange)          cellBg = Colors.primaryFaded;
+          if (isStart || isEnd) {
+            dotStyle   = { backgroundColor: Colors.primary, borderRadius: CELL_SIZE / 2 };
+            textColor  = '#FFFFFF';
+            fontWeight = Typography.weight.bold;
+          }
+
+          let rangeEdge = {};
+          if (inRange) {
+            const col = idx % 7;
+            if (col === 0 || isStart) rangeEdge = { borderTopLeftRadius: CELL_SIZE / 2, borderBottomLeftRadius: CELL_SIZE / 2 };
+            if (col === 6 || isEnd)   rangeEdge = { borderTopRightRadius: CELL_SIZE / 2, borderBottomRightRadius: CELL_SIZE / 2 };
+          }
+
+          return (
+            <TouchableOpacity
+              key={day}
+              style={[sStyles.calCell, { backgroundColor: cellBg }, rangeEdge]}
+              onPress={() => !isPast && handleDayPress(day)}
+              activeOpacity={isPast ? 1 : 0.75}
+            >
+              <View style={[sStyles.calDayInner, dotStyle]}>
+                <Text style={[
+                  sStyles.calDayText,
+                  { color: textColor, fontWeight },
+                  isToday && !isStart && !isEnd && { textDecorationLine: 'underline' },
+                ]}>
+                  {day}
+                </Text>
+              </View>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+
+      {/* Summary bar */}
+      {startDate ? (
+        <View style={sStyles.dateSummary}>
+          <Text style={sStyles.dateSummaryText}>
+            {`${startDate.getDate()} ${TR_MONTHS[startDate.getMonth()]}`}
+            {' → '}
+            {endDate ? `${endDate.getDate()} ${TR_MONTHS[endDate.getMonth()]}` : 'Bitiş tarihi seç'}
+          </Text>
+          {computedDays && (
+            <View style={sStyles.daysChip}>
+              <Text style={sStyles.daysChipText}>{computedDays} gün</Text>
+            </View>
+          )}
+        </View>
+      ) : (
+        <Text style={sStyles.calHint}>Başlangıç tarihine dokun</Text>
+      )}
+      {startDate && !endDate && (
+        <Text style={sStyles.calHint}>Şimdi bitiş tarihini seç</Text>
+      )}
     </View>
   );
 }
@@ -192,15 +349,22 @@ function StepInterests({ value, onChange }) {
 
 export default function OnboardingScreen({ navigation }) {
   const { startTrip } = useTrip();
-  const [stepIndex, setStepIndex] = useState(0);
-  const [destination, setDestination] = useState('');
-  const [days, setDays] = useState(3);
+  const [stepIndex,     setStepIndex]     = useState(0);
+  const [startLocation, setStartLocation] = useState('');
+  const [destination,   setDestination]   = useState('');
+  const [startDate,     setStartDate]     = useState(null);
+  const [endDate,       setEndDate]       = useState(null);
   const [accommodation, setAccommodation] = useState('caravan');
-  const [budget, setBudget] = useState('standart');
-  const [interests, setInterests] = useState([]);
+  const [budget,        setBudget]        = useState('standart');
+  const [interests,     setInterests]     = useState([]);
 
   const slideX  = useRef(new Animated.Value(0)).current;
   const opacity = useRef(new Animated.Value(1)).current;
+
+  const computedDays = useMemo(() => {
+    if (!startDate || !endDate) return 1;
+    return Math.max(1, Math.round((endDate - startDate) / (1000 * 60 * 60 * 24)) + 1);
+  }, [startDate, endDate]);
 
   const animate = useCallback((exitDir, cb) => {
     Animated.parallel([
@@ -217,7 +381,15 @@ export default function OnboardingScreen({ navigation }) {
     });
   }, []);
 
-  const canProceed = stepIndex === 0 ? destination.trim().length > 0 : true;
+  const canProceed = useMemo(() => {
+    switch (STEPS[stepIndex].key) {
+      case 'startLocation': return startLocation.trim().length > 0;
+      case 'destination':   return destination.trim().length > 0;
+      case 'dates':         return startDate !== null && endDate !== null;
+      default:              return true;
+    }
+  }, [stepIndex, startLocation, destination, startDate, endDate]);
+
   const isLast = stepIndex === STEPS.length - 1;
 
   const goNext = useCallback(() => {
@@ -225,10 +397,19 @@ export default function OnboardingScreen({ navigation }) {
     if (!isLast) {
       animate(1, () => setStepIndex((i) => i + 1));
     } else {
-      startTrip({ destination: destination.trim(), days, accommodationType: accommodation, budget, interests });
+      startTrip({
+        startLocation:     startLocation.trim(),
+        destination:       destination.trim(),
+        startDate:         startDate ? startDate.toISOString().split('T')[0] : null,
+        endDate:           endDate   ? endDate.toISOString().split('T')[0]   : null,
+        days:              computedDays,
+        accommodationType: accommodation,
+        budget,
+        interests,
+      });
       navigation.navigate(Routes.MAIN);
     }
-  }, [canProceed, isLast, destination, days, accommodation, budget, interests, stepIndex]);
+  }, [canProceed, isLast, startLocation, destination, startDate, endDate, computedDays, accommodation, budget, interests]);
 
   const goBack = useCallback(() => {
     if (stepIndex > 0) animate(-1, () => setStepIndex((i) => i - 1));
@@ -238,11 +419,18 @@ export default function OnboardingScreen({ navigation }) {
 
   const renderContent = () => {
     switch (step.key) {
-      case 'destination': return <StepDestination value={destination} onChange={setDestination} />;
-      case 'days':        return <StepDays        value={days}        onChange={setDays} />;
-      case 'accom':       return <StepAccommodation value={accommodation} onChange={setAccommodation} />;
-      case 'budget':      return <StepBudget      value={budget}      onChange={setBudget} />;
-      case 'interests':   return <StepInterests   value={interests}   onChange={setInterests} />;
+      case 'startLocation':
+        return <LocationStep value={startLocation} onChange={setStartLocation} suggestions={POPULAR_STARTS} placeholder="İstanbul, Ankara, İzmir..." />;
+      case 'destination':
+        return <LocationStep value={destination} onChange={setDestination} suggestions={POPULAR_ENDS} placeholder="Kapadokya, Bodrum, Rize..." />;
+      case 'dates':
+        return <StepDates startDate={startDate} endDate={endDate} onDatesChange={(s, e) => { setStartDate(s); setEndDate(e); }} />;
+      case 'accom':
+        return <StepAccommodation value={accommodation} onChange={setAccommodation} />;
+      case 'budget':
+        return <StepBudget value={budget} onChange={setBudget} />;
+      case 'interests':
+        return <StepInterests value={interests} onChange={setInterests} />;
     }
   };
 
@@ -259,6 +447,20 @@ export default function OnboardingScreen({ navigation }) {
           <Text style={styles.progressLabel}>{stepIndex + 1}/{STEPS.length}</Text>
         </View>
 
+        {/* Route preview pill — visible after both cities entered */}
+        {startLocation.trim() && destination.trim() && stepIndex >= 2 && (
+          <View style={styles.routePreview}>
+            <Text style={styles.routePreviewText} numberOfLines={1}>
+              {startLocation} → {destination}
+            </Text>
+            {computedDays > 1 && (
+              <View style={styles.routePreviewDaysPill}>
+                <Text style={styles.routePreviewDaysText}>{computedDays} gün</Text>
+              </View>
+            )}
+          </View>
+        )}
+
         {/* Step header */}
         <View style={styles.header}>
           <Text style={styles.headerEmoji}>{step.emoji}</Text>
@@ -268,12 +470,16 @@ export default function OnboardingScreen({ navigation }) {
 
         {/* Animated body */}
         <Animated.View style={[styles.body, { transform: [{ translateX: slideX }], opacity }]}>
-          <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+          <ScrollView
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+          >
             {renderContent()}
           </ScrollView>
         </Animated.View>
 
-        {/* Navigation */}
+        {/* Nav row */}
         <View style={styles.navRow}>
           <TouchableOpacity style={styles.backBtn} onPress={goBack} activeOpacity={0.8} disabled={stepIndex === 0}>
             <Text style={[styles.backText, stepIndex === 0 && { opacity: 0 }]}>← Geri</Text>
@@ -300,196 +506,92 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
 
   progressRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: Spacing.md,
-    paddingTop: Spacing.md,
-    gap: Spacing.sm,
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: Spacing.md, paddingTop: Spacing.md, gap: Spacing.sm,
   },
-  progressTrack: {
-    flex: 1,
-    height: 4,
-    backgroundColor: Colors.borderLight,
-    borderRadius: 2,
-    overflow: 'hidden',
-  },
-  progressFill: {
-    height: '100%',
-    backgroundColor: Colors.primary,
-    borderRadius: 2,
-  },
-  progressLabel: {
-    fontSize: Typography.size.xs,
-    color: Colors.textTertiary,
-    fontWeight: Typography.weight.bold,
-  },
+  progressTrack: { flex: 1, height: 4, backgroundColor: Colors.borderLight, borderRadius: 2, overflow: 'hidden' },
+  progressFill:  { height: '100%', backgroundColor: Colors.primary, borderRadius: 2 },
+  progressLabel: { fontSize: Typography.size.xs, color: Colors.textTertiary, fontWeight: Typography.weight.bold },
 
-  header: {
-    alignItems: 'center',
-    paddingVertical: Spacing.xl,
-    gap: Spacing.xs,
+  routePreview: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: Spacing.sm, marginTop: Spacing.sm, marginHorizontal: Spacing.md,
+    backgroundColor: Colors.primaryFaded, borderRadius: Radius.full,
+    paddingHorizontal: Spacing.md, paddingVertical: Spacing.xs + 2,
   },
-  headerEmoji: { fontSize: 52, marginBottom: Spacing.xs },
-  headerTitle: {
-    fontSize: Typography.size.xxxl,
-    fontWeight: Typography.weight.extrabold,
-    color: Colors.textPrimary,
-    letterSpacing: -1,
-  },
-  headerSub: {
-    fontSize: Typography.size.base,
-    color: Colors.textTertiary,
-  },
+  routePreviewText: { fontSize: Typography.size.xs, color: Colors.primary, fontWeight: Typography.weight.semibold, flex: 1, textAlign: 'center' },
+  routePreviewDaysPill: { backgroundColor: Colors.primary, borderRadius: Radius.full, paddingHorizontal: 8, paddingVertical: 2 },
+  routePreviewDaysText: { fontSize: Typography.size.xs, color: '#FFFFFF', fontWeight: Typography.weight.bold },
+
+  header: { alignItems: 'center', paddingVertical: Spacing.lg, gap: Spacing.xs },
+  headerEmoji: { fontSize: 44, marginBottom: Spacing.xs },
+  headerTitle: { fontSize: Typography.size.xxxl, fontWeight: Typography.weight.extrabold, color: Colors.textPrimary, letterSpacing: -1 },
+  headerSub:   { fontSize: Typography.size.base, color: Colors.textTertiary },
 
   body: { flex: 1 },
-  scrollContent: {
-    paddingHorizontal: Spacing.md,
-    paddingBottom: Spacing.lg,
-  },
+  scrollContent: { paddingHorizontal: Spacing.md, paddingBottom: Spacing.lg },
 
   navRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.md,
-    gap: Spacing.md,
-    borderTopWidth: 1,
-    borderTopColor: Colors.borderLight,
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: Spacing.md, paddingVertical: Spacing.md,
+    gap: Spacing.md, borderTopWidth: 1, borderTopColor: Colors.borderLight,
     backgroundColor: Colors.background,
   },
-  backBtn: {
-    height: 52,
-    paddingHorizontal: Spacing.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-    minWidth: 80,
-  },
-  backText: {
-    fontSize: Typography.size.base,
-    fontWeight: Typography.weight.semibold,
-    color: Colors.textSecondary,
-  },
-  nextBtn: {
-    flex: 1,
-    height: 52,
-    backgroundColor: Colors.primary,
-    borderRadius: Radius.xl,
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...Shadow.sm,
-  },
+  backBtn:        { height: 52, paddingHorizontal: Spacing.md, alignItems: 'center', justifyContent: 'center', minWidth: 80 },
+  backText:       { fontSize: Typography.size.base, fontWeight: Typography.weight.semibold, color: Colors.textSecondary },
+  nextBtn:        { flex: 1, height: 52, backgroundColor: Colors.primary, borderRadius: Radius.xl, alignItems: 'center', justifyContent: 'center', ...Shadow.sm },
   nextBtnDisabled: { backgroundColor: Colors.border },
-  nextText: {
-    fontSize: Typography.size.base,
-    fontWeight: Typography.weight.bold,
-    color: '#FFFFFF',
-  },
+  nextText:       { fontSize: Typography.size.base, fontWeight: Typography.weight.bold, color: '#FFFFFF' },
 });
 
 const sStyles = StyleSheet.create({
   stepContent: { gap: Spacing.md },
 
-  inputWrapper: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.surface,
-    borderRadius: Radius.xl,
-    paddingHorizontal: Spacing.md,
-    gap: Spacing.sm,
-  },
-  inputEmoji: { fontSize: 20 },
-  input: {
-    flex: 1,
-    height: 56,
-    fontSize: Typography.size.lg,
-    color: Colors.textPrimary,
-  },
-  suggestions: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },
-  suggestionChip: {
-    backgroundColor: Colors.surface,
-    borderRadius: Radius.full,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
+  inputWrapper: { flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.surface, borderRadius: Radius.xl, paddingHorizontal: Spacing.md, gap: Spacing.sm },
+  inputEmoji:   { fontSize: 20 },
+  input:        { flex: 1, height: 56, fontSize: Typography.size.lg, color: Colors.textPrimary },
+  suggestions:  { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },
+  suggestionChip: { backgroundColor: Colors.surface, borderRadius: Radius.full, paddingHorizontal: 14, paddingVertical: 8, borderWidth: 1, borderColor: Colors.border },
   suggestionText: { fontSize: Typography.size.sm, color: Colors.textSecondary },
 
-  selectedDayBox: {
-    alignSelf: 'center',
-    alignItems: 'center',
-    backgroundColor: Colors.primaryFaded,
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    justifyContent: 'center',
-  },
-  selectedDayNum: {
-    fontSize: Typography.size.hero,
-    fontWeight: Typography.weight.extrabold,
-    color: Colors.primary,
-    lineHeight: 52,
-  },
-  selectedDayLabel: { fontSize: Typography.size.base, color: Colors.primary, fontWeight: Typography.weight.medium },
-  daysGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm, justifyContent: 'center' },
-  dayBtn: {
-    width: 64,
-    height: 64,
-    borderRadius: Radius.lg,
-    borderWidth: 1.5,
-    borderColor: Colors.border,
-    backgroundColor: Colors.surface,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  dayBtnText: { fontSize: Typography.size.base, fontWeight: Typography.weight.medium, color: Colors.textSecondary },
+  // Calendar
+  calendarWrap:   { gap: Spacing.sm },
+  calMonthRow:    { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 },
+  calNavBtn:      { width: 40, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: Radius.md, backgroundColor: Colors.surface },
+  calNavText:     { fontSize: 22, color: Colors.primary, fontWeight: Typography.weight.bold, lineHeight: 26 },
+  calMonthLabel:  { fontSize: Typography.size.md, fontWeight: Typography.weight.bold, color: Colors.textPrimary },
+  calDayHeaders:  { flexDirection: 'row' },
+  calGrid:        { flexDirection: 'row', flexWrap: 'wrap' },
+  calCell:        { width: CELL_SIZE, height: CELL_SIZE, alignItems: 'center', justifyContent: 'center' },
+  calDayHeader:   { fontSize: 10, fontWeight: Typography.weight.bold, color: Colors.textTertiary, textAlign: 'center' },
+  calDayInner:    { width: CELL_SIZE - 4, height: CELL_SIZE - 4, alignItems: 'center', justifyContent: 'center' },
+  calDayText:     { fontSize: Typography.size.sm, textAlign: 'center' },
+  dateSummary:    { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.sm, backgroundColor: Colors.primaryFaded, borderRadius: Radius.xl, padding: Spacing.md, marginTop: Spacing.xs },
+  dateSummaryText: { fontSize: Typography.size.base, fontWeight: Typography.weight.semibold, color: Colors.primary },
+  daysChip:       { backgroundColor: Colors.primary, borderRadius: Radius.full, paddingHorizontal: 12, paddingVertical: 4 },
+  daysChipText:   { fontSize: Typography.size.xs, fontWeight: Typography.weight.bold, color: '#FFFFFF' },
+  calHint:        { textAlign: 'center', fontSize: Typography.size.sm, color: Colors.textTertiary, marginTop: Spacing.xs, fontStyle: 'italic' },
 
-  accomCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderRadius: Radius.xl,
-    borderWidth: 1.5,
-    borderColor: 'transparent',
-    padding: Spacing.md,
-    gap: Spacing.md,
-  },
+  // Accommodation
+  accomCard:  { flexDirection: 'row', alignItems: 'center', borderRadius: Radius.xl, borderWidth: 1.5, borderColor: 'transparent', padding: Spacing.md, gap: Spacing.md },
   accomEmoji: { fontSize: 32 },
-  accomText: { flex: 1 },
+  accomText:  { flex: 1 },
   accomLabel: { fontSize: Typography.size.md, fontWeight: Typography.weight.bold, color: Colors.textPrimary },
-  accomDesc: { fontSize: Typography.size.xs, color: Colors.textTertiary, marginTop: 2 },
+  accomDesc:  { fontSize: Typography.size.xs, color: Colors.textTertiary, marginTop: 2 },
 
-  budgetCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderRadius: Radius.xl,
-    borderWidth: 1.5,
-    padding: Spacing.md,
-    gap: Spacing.md,
-  },
+  // Budget
+  budgetCard:  { flexDirection: 'row', alignItems: 'center', borderRadius: Radius.xl, borderWidth: 1.5, padding: Spacing.md, gap: Spacing.md },
   budgetEmoji: { fontSize: 30 },
-  budgetText: { flex: 1 },
+  budgetText:  { flex: 1 },
   budgetLabel: { fontSize: Typography.size.md, fontWeight: Typography.weight.bold },
-  budgetDesc: { fontSize: Typography.size.xs, color: Colors.textTertiary, marginTop: 2 },
+  budgetDesc:  { fontSize: Typography.size.xs, color: Colors.textTertiary, marginTop: 2 },
 
-  radio: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    borderWidth: 2,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  radio:      { width: 22, height: 22, borderRadius: 11, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
   radioInner: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#FFFFFF' },
 
-  chipsWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },
-  interestChip: {
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm + 2,
-    borderRadius: Radius.full,
-    borderWidth: 1.5,
-    borderColor: Colors.border,
-    backgroundColor: Colors.surface,
-  },
+  // Interests
+  chipsWrap:    { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },
+  interestChip: { paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm + 2, borderRadius: Radius.full, borderWidth: 1.5, borderColor: Colors.border, backgroundColor: Colors.surface },
   interestText: { fontSize: Typography.size.base, color: Colors.textSecondary },
-  skipHint: { textAlign: 'center', fontSize: Typography.size.sm, color: Colors.textTertiary, marginTop: Spacing.md },
+  skipHint:     { textAlign: 'center', fontSize: Typography.size.sm, color: Colors.textTertiary, marginTop: Spacing.md },
 });
