@@ -61,51 +61,27 @@ const VEHICLE_TYPE_LABELS = {
 
 function buildCaravanContext(profile) {
   const { vehicleType, length, waterTank, solarPanel, persons = 2 } = profile;
-  const dailyUse   = 15 * persons; // L/day
+  const dailyUse   = 15 * persons;
   const refillDays = waterTank ? Math.max(1, Math.floor(waterTank / dailyUse)) : 2;
-
-  const roadRule =
-    vehicleType === 'small_caravan'  ? 'Tüm yollar uygundur (<6m).' :
-    vehicleType === 'medium_caravan' ? 'Ana yollar ve devlet yolları tercih et (6-8m). Dar köy yollarından kaçın.' :
-    'Sadece otoyol ve geniş devlet yolları (>8m). Şehir merkezine girme, çevre yolunu kullan.';
-
-  const solarNote = solarPanel
-    ? '\n- Güneş paneli VAR: Bulutlu/yağmurlu günlerde "enerji tasarrufu modu" uyarısı ver, güneşli kampları tercih et.'
-    : '\n- Güneş paneli YOK: Elektrik bağlantısı olan karavan parklarını tercih et.';
-
-  const alkovWarning = vehicleType === 'alcove'
-    ? '\n- ALKOVEN: Yüksek profil nedeniyle köprü ve tünel yükseklik limitlerini kontrol et. Güçlü rüzgar (>30km/s) varsa seyahatten kaçın.'
-    : '';
-
-  return `
-KARAVAN PROFİLİ:
-- Araç: ${VEHICLE_TYPE_LABELS[vehicleType]}, ${length || '?'}m, ${waterTank || '?'}L su deposu, ${persons} kişi
-- Günlük su tüketimi: ~${dailyUse}L → Her ${refillDays} günde bir içme suyu dolum durağı rotaya ekle (aktiviteler arasında not olarak belirt)
-- Yol kısıtı: ${roadRule}${solarNote}${alkovWarning}
-- Konaklama seçeneklerinde karavan boyutuna uygun park alanı bilgisi ver.
-`;
+  const roadRule   =
+    vehicleType === 'small_caravan'  ? 'tüm yollar (<6m)' :
+    vehicleType === 'medium_caravan' ? 'ana yollar (6-8m), dar sokaktan kaçın' :
+    'otoyol/geniş yol (>8m), şehir merkezine girme';
+  const extras = [
+    solarPanel ? 'güneş paneli var' : 'elektrik bağlantılı park gerekli',
+    vehicleType === 'alcove' ? 'alkoven: rüzgar >30km/s varsa yolculuğu erteleme' : '',
+  ].filter(Boolean).join('; ');
+  return `\nKARAVAN: ${VEHICLE_TYPE_LABELS[vehicleType]}, ${length||'?'}m, ${waterTank||'?'}L, ${persons} kişi. Her ${refillDays} günde içme suyu durağı ekle. Yol kısıtı: ${roadRule}. ${extras}\n`;
 }
 
 function buildCampingContext(profile) {
   const { persons = 2 } = profile;
-  return `
-ÇADIR KAMPİNG PROFİLİ (${persons} kişi):
-- GÜVENLİK: Gece sıcaklığı <5°C ise "uyku tulumu uyarısı" ver. Yağış/fırtına varsa alternatif korunaklı alan öner. Dere yatağı ve vadilerden uzak dur (sel riski).
-- KONFOR: Yakınında tuvalet/duş tesisi olan kamp alanlarını tercih et. Su kaynağına mesafeyi konaklama notunda belirt.
-- SOSYAL: Hafta sonu ise "yoğun olabilir" uyarısı ver. Ateş yakma izni olan alanları "(ateş izinli)" ile işaretle.
-`;
+  return `\nÇADIR (${persons} kişi): Gece <5°C → uyku tulumu uyarısı. Dere/vadi → sel riski. Tuvalet/duş tesisi olan kampları tercih et. Ateş izinli alanları "(ateş izinli)" ile işaretle.\n`;
 }
 
-function buildHotelContext(profile, preferences) {
+function buildHotelContext(profile) {
   const { persons = 2 } = profile;
-  const { startDate } = preferences;
-  return `
-OTEL PROFİLİ (${persons} kişi):
-- CHECK-IN: Oteller genellikle 14:00-15:00 check-in. Günün son aktivitesi 17:00'ye kadar otel check-in içersin. activities'e "17:00 — Otel Check-in" aktivitesi ekle (tag: "Konaklama").
-- KAHVALTI: Konaklama seçeneğinin "note" alanında kahvaltı dahil mi belirt. Kahvaltı dahil ise sabah aktivitesi 09:30'dan başlayabilir.
-- OTOPARK: Konaklama note alanında otopark bilgisi ekle (ücretli/ücretsiz/yok).
-- AKTİVİTE PLANI: Aktiviteleri otele yakın (yürüme mesafesi) ve toplu taşıma ile ulaşılabilir seç.
-`;
+  return `\nOTEL (${persons} kişi): Son aktivite 17:00 check-in olsun (tag:"Konaklama"). Konaklama note'unda kahvaltı ve otopark bilgisi ver. Aktiviteleri yürüme mesafesinde seç.\n`;
 }
 
 // ─── Report builders (local computation) ─────────────────────────────────
@@ -248,6 +224,7 @@ YOLCULUK KURALLARI (ÇOK ÖNEMLİ):
 - Uzun yollar (4-6 saat): aktiviteler 13:00-14:00'da başlasın.
 
 DİĞER KURALLAR:
+0. GÜZERGAH: ${selectedCities?.join(' → ') || `${startLocation} → ${destination}`}. Her şehir için TAM OLARAK 1 gün. Aynı şehirde 2 gün geçirilmez. Şehirleri atlamadan sırayla geç.
 1. Her aktivite başlığında GERÇEK mekan adı kullan.
 2. description: 1 kısa cümle (max 12 kelime).
 3. Her gün 16:00'da "Serbest Zaman & Alışveriş": gerçek çarşı/pazar/AVM adı, tag "Serbest".
@@ -324,7 +301,7 @@ SADECE şu JSON formatında yanıt ver:
 
 // ─── Phase 2: full route generation (with auto-batching for long trips) ──
 
-const BATCH_SIZE = 5; // max days per API call
+const BATCH_SIZE = 4; // max days per API call (4 = safer token budget)
 
 export async function generateAIRoute(preferences, apiKey, onProgress) {
   if (!apiKey) throw new Error('API_KEY_MISSING');
@@ -403,10 +380,8 @@ async function _generateSingle(prefs, apiKey, onProgress, dayOffset) {
   onProgress?.('Rota oluşturuluyor...');
   const route = await _callAPI(prefs, apiKey);
 
-  // Adjust day numbers if this is a batch continuation
-  if (dayOffset > 0) {
-    route.forEach((d) => { d.day = d.day + dayOffset; });
-  }
+  // Always normalize by array index — never trust AI's day numbers
+  route.forEach((d, i) => { d.day = dayOffset + i + 1; });
 
   return normalizeAIResponse(route, prefs);
 }
@@ -431,7 +406,8 @@ async function _generateBatched(prefs, apiKey, onProgress) {
       previousCity: i > 0 ? batches[i - 1].at(-1) : null,
     };
     const route = await _callAPI(batchPrefs, apiKey);
-    route.forEach((d) => { d.day = d.day + dayOffset; });
+    // Normalize by index — never trust AI's day numbers
+    route.forEach((d, i) => { d.day = dayOffset + i + 1; });
     allDays.push(...route);
     dayOffset += batches[i].length;
   }

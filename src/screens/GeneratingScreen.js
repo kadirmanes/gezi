@@ -265,7 +265,10 @@ export default function GeneratingScreen({ navigation, route }) {
       setPhase('generating_route');
       const key = apiKey || savedApiKey;
       const selectedArr = selCities ? Array.from(selCities) : null;
-      const prefs = selectedArr ? { ...preferences, selectedCities: selectedArr } : preferences;
+      // days must match selectedCities count (user may have deselected some)
+      const prefs = selectedArr
+        ? { ...preferences, selectedCities: selectedArr, days: selectedArr.length }
+        : preferences;
 
       // Fetch weather for selected cities (optional — continues if API key not set)
       let weatherMap = {};
