@@ -147,10 +147,18 @@ SADECE aşağıdaki JSON formatında yanıt ver. Başka hiçbir şey yazma:
 // ─── JSON extractor ───────────────────────────────────────────────────────
 
 function extractJSON(text) {
-  const start = text.indexOf('{');
-  const end   = text.lastIndexOf('}');
-  if (start === -1 || end === -1) throw new Error('JSON bulunamadı');
-  return JSON.parse(text.slice(start, end + 1));
+  // Try direct parse first
+  try { return JSON.parse(text.trim()); } catch (_) {}
+
+  // Find first { … last } block
+  const s = text.indexOf('{');
+  const e = text.lastIndexOf('}');
+  if (s === -1 || e === -1 || s >= e) throw new Error('JSON bulunamadı');
+  try {
+    return JSON.parse(text.slice(s, e + 1));
+  } catch (parseErr) {
+    throw new Error(`JSON parse hatası: ${parseErr.message.slice(0, 120)}`);
+  }
 }
 
 // ─── Phase 1: generate city list (fast) ──────────────────────────────────
@@ -187,8 +195,14 @@ SADECE şu JSON formatında yanıt ver:
 
   const data = await response.json();
   const text = data?.content?.[0]?.text || '';
-  const parsed = extractJSON(text);
-  return Array.isArray(parsed?.cities) ? parsed.cities : [];
+  console.log('[generateCityList] raw:', text.slice(0, 200));
+  try {
+    const parsed = extractJSON(text);
+    return Array.isArray(parsed?.cities) ? parsed.cities : [];
+  } catch (parseErr) {
+    console.error('[generateCityList] JSON parse failed:', parseErr.message);
+    return [];
+  }
 }
 
 // ─── Phase 2: full route generation ──────────────────────────────────────
@@ -225,12 +239,30 @@ export async function generateAIRoute(preferences, apiKey, onProgress) {
   onProgress?.('Şehirler ve mekanlar seçiliyor...');
 
   const data = await response.json();
+  const stopReason = data?.stop_reason;
   const text = data?.content?.[0]?.text || '';
+
+  console.log('[generateAIRoute] stop_reason:', stopReason, '| chars:', text.length);
+  if (text.length > 0) console.log('[generateAIRoute] tail:', text.slice(-120));
+
+  if (stopReason === 'max_tokens') {
+    throw new Error('AI yanıtı token limitini aştı. Gün sayısını azalt veya tercihlerini basitleştir.');
+  }
 
   onProgress?.('Konaklama alternatifleri oluşturuluyor...');
 
-  const parsed = extractJSON(text);
-  if (!parsed?.route?.length) throw new Error('Geçersiz AI yanıtı');
+  let parsed;
+  try {
+    parsed = extractJSON(text);
+  } catch (parseErr) {
+    console.error('[generateAIRoute] extractJSON failed:', parseErr.message);
+    throw parseErr;
+  }
+
+  if (!parsed?.route?.length) {
+    console.error('[generateAIRoute] no route in parsed:', JSON.stringify(parsed)?.slice(0, 300));
+    throw new Error('Geçersiz AI yanıtı — route alanı bulunamadı');
+  }
 
   return normalizeAIResponse(parsed.route, preferences);
 }

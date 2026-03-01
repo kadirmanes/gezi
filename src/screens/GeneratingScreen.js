@@ -234,16 +234,20 @@ export default function GeneratingScreen({ navigation, route }) {
 
       const cityList = await generateCityList(preferences, apiKey, (msg) => setStatus(msg));
 
-      if (cityList.length > 0) {
+      // Deduplicate (AI sometimes returns same city twice)
+      const uniqueCities = [...new Set(cityList)];
+
+      if (uniqueCities.length > 0) {
         setSavedApiKey(apiKey);
-        setCities(cityList);
-        setSelectedCities(new Set(cityList));
+        setCities(uniqueCities);
+        setSelectedCities(new Set(uniqueCities));
         setPhase('city_selection');
       } else {
         // No cities returned — skip to full route directly
         await runPhase2(apiKey, null);
       }
     } catch (err) {
+      console.error('[runPhase1] error:', err?.message, err);
       if (err.message === 'API_KEY_MISSING' || err.message === 'API_KEY_INVALID') {
         setPhase('key_needed');
       } else {
@@ -265,6 +269,7 @@ export default function GeneratingScreen({ navigation, route }) {
       setTripFromAI(preferences, result);
       navigation.replace(Routes.MAIN);
     } catch (err) {
+      console.error('[runPhase2] error:', err?.message, err);
       if (err.message === 'API_KEY_MISSING' || err.message === 'API_KEY_INVALID') {
         setPhase('key_needed');
       } else {
