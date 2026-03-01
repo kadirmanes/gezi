@@ -18,7 +18,7 @@ import AccommodationBadge from '../components/AccommodationBadge';
 import WeatherWidget from '../components/WeatherWidget';
 import ExpenseModal from '../components/ExpenseModal';
 import { useTrip } from '../context/TripContext';
-import { Routes } from '../navigation/AppNavigator';
+import { Routes } from '../navigation/routes';
 
 // ─── Constants ────────────────────────────────────────────────────────────
 

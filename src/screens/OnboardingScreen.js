@@ -20,7 +20,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors } from '../constants/colors';
 import { Radius, Shadow, Spacing, Typography } from '../constants/theme';
-import { Routes } from '../navigation/AppNavigator';
+import { Routes } from '../navigation/routes';
 import { useTrip } from '../context/TripContext';
 
 const { width: W } = Dimensions.get('window');

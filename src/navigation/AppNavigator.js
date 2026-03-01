@@ -6,15 +6,9 @@ import OnboardingScreen from '../screens/OnboardingScreen';
 import ActivityDetailScreen from '../screens/ActivityDetailScreen';
 import PackingListScreen from '../screens/PackingListScreen';
 import MainTabs from './MainTabs';
+import { Routes } from './routes';
 
 const Stack = createNativeStackNavigator();
-
-export const Routes = {
-  ONBOARDING: 'Onboarding',
-  MAIN: 'Main',
-  ACTIVITY_DETAIL: 'ActivityDetail',
-  PACKING_LIST: 'PackingList',
-};
 
 export default function AppNavigator() {
   return (
