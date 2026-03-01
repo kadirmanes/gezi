@@ -82,6 +82,19 @@ export function TripProvider({ children }) {
     setExpenses((prev) => prev.filter((e) => e.id !== id));
   }, []);
 
+  const updateActivity = useCallback((dayIndex, activityIndex, newActivity) => {
+    setTripData((prev) => {
+      if (!prev?.days) return prev;
+      const days = [...prev.days];
+      const day = { ...days[dayIndex] };
+      const activities = [...day.activities];
+      activities[activityIndex] = { ...activities[activityIndex], ...newActivity };
+      day.activities = activities;
+      days[dayIndex] = day;
+      return { ...prev, days };
+    });
+  }, []);
+
   // ── Derived totals ────────────────────────────────────────────────────────
 
   const totalSpent = expenses.reduce((s, e) => s + e.amount, 0);
@@ -100,6 +113,7 @@ export function TripProvider({ children }) {
         resetTrip,
         addExpense,
         removeExpense,
+        updateActivity,
       }}
     >
       {children}

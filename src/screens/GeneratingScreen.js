@@ -1,9 +1,9 @@
 /**
- * GeneratingScreen — shown while Claude AI builds the travel plan.
+ * GeneratingScreen — 2-phase AI route generation.
  *
- * Receives `preferences` via navigation params, calls the AI service,
- * then navigates to MAIN on success or shows an error (with API key
- * entry) on failure.
+ * Phase 1 (generating_cities): quick call → city list
+ * Phase 2 (city_selection):    user reviews & deselects cities
+ * Phase 3 (generating_route):  full route with selected cities
  */
 
 import React, { useEffect, useRef, useState, useCallback } from 'react';
@@ -17,12 +17,12 @@ import { Colors } from '../constants/colors';
 import { Radius, Shadow, Spacing, Typography } from '../constants/theme';
 import { Routes } from '../navigation/routes';
 import { useTrip } from '../context/TripContext';
-import { generateAIRoute, getApiKey, saveApiKey, API_KEY_STORAGE } from '../services/aiRoute';
+import { generateAIRoute, generateCityList, getApiKey, saveApiKey, API_KEY_STORAGE } from '../services/aiRoute';
 
 const STEPS = [
   'Güzergah analiz ediliyor...',
   'Şehirler ve mekanlar seçiliyor...',
-  'Konaklama yerleri belirleniyor...',
+  'Konaklama alternatifleri oluşturuluyor...',
   'Aktiviteler kişiselleştiriliyor...',
   'Plan tamamlanıyor...',
 ];
@@ -73,7 +73,6 @@ function RouteAnimation({ startLocation, destination }) {
       Animated.timing(progress, { toValue: 1, duration: 2000, useNativeDriver: false }),
       Animated.spring(pinScale, { toValue: 1, useNativeDriver: true }),
     ]).start();
-    // Loop the line animation
     Animated.loop(
       Animated.sequence([
         Animated.timing(progress, { toValue: 1, duration: 2200, useNativeDriver: false }),
@@ -88,7 +87,6 @@ function RouteAnimation({ startLocation, destination }) {
         <Text style={routeAnim.pinEmoji}>🚩</Text>
         <Text style={routeAnim.pinLabel} numberOfLines={1}>{startLocation}</Text>
       </View>
-
       <View style={routeAnim.lineWrap}>
         <View style={routeAnim.lineTrack} />
         <Animated.View
@@ -96,14 +94,12 @@ function RouteAnimation({ startLocation, destination }) {
             width: progress.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }),
           }]}
         />
-        {/* Moving car/tent dot */}
         <Animated.View
           style={[routeAnim.movingDot, {
             left: progress.interpolate({ inputRange: [0, 1], outputRange: ['0%', '96%'] }),
           }]}
         />
       </View>
-
       <Animated.View style={[routeAnim.endPin, { transform: [{ scale: pinScale }] }]}>
         <Text style={routeAnim.pinEmoji}>🏁</Text>
         <Text style={routeAnim.pinLabel} numberOfLines={1}>{destination}</Text>
@@ -145,28 +141,80 @@ function ApiKeyForm({ onSubmit, loading }) {
   );
 }
 
+// ─── City Selection phase ─────────────────────────────────────────────────
+
+function CitySelection({ cities, selectedCities, onToggle, onConfirm, preferences }) {
+  return (
+    <ScrollView contentContainerStyle={cityStyles.container} showsVerticalScrollIndicator={false}>
+      <Text style={cityStyles.title}>🗺️ Güzergah Şehirleri</Text>
+      <Text style={cityStyles.subtitle}>
+        {preferences?.startLocation} → {preferences?.destination}
+      </Text>
+      <Text style={cityStyles.hint}>
+        İstemediğin şehirlerin işaretini kaldır, sonra rotayı oluştur
+      </Text>
+
+      <View style={cityStyles.chipsWrap}>
+        {cities.map((city, idx) => {
+          const selected = selectedCities.has(city);
+          return (
+            <TouchableOpacity
+              key={city}
+              style={[cityStyles.chip, selected && cityStyles.chipSelected]}
+              onPress={() => onToggle(city)}
+              activeOpacity={0.75}
+            >
+              <Text style={[cityStyles.chipNum, selected && cityStyles.chipNumSel]}>
+                {selected ? '✓' : idx + 1}
+              </Text>
+              <Text style={[cityStyles.chipText, selected && cityStyles.chipTextSel]}>{city}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+
+      <Text style={cityStyles.selectedCount}>
+        {selectedCities.size} şehir seçili
+      </Text>
+
+      <TouchableOpacity
+        style={[cityStyles.confirmBtn, selectedCities.size === 0 && { opacity: 0.4 }]}
+        onPress={onConfirm}
+        disabled={selectedCities.size === 0}
+        activeOpacity={0.85}
+      >
+        <Text style={cityStyles.confirmBtnText}>Rotayı Oluştur ✨</Text>
+      </TouchableOpacity>
+    </ScrollView>
+  );
+}
+
 // ─── Main Screen ──────────────────────────────────────────────────────────
 
 export default function GeneratingScreen({ navigation, route }) {
   const { preferences } = route.params || {};
   const { setTripFromAI } = useTrip();
 
-  const [phase,    setPhase]    = useState('generating'); // generating | error | key_needed
-  const [status,   setStatus]   = useState(STEPS[0]);
-  const [stepIdx,  setStepIdx]  = useState(0);
-  const [errorMsg, setErrorMsg] = useState('');
-  const [keyLoading, setKeyLoading] = useState(false);
+  // phases: generating_cities | city_selection | generating_route | error | key_needed
+  const [phase,         setPhase]         = useState('generating_cities');
+  const [status,        setStatus]        = useState(STEPS[0]);
+  const [stepIdx,       setStepIdx]       = useState(0);
+  const [errorMsg,      setErrorMsg]      = useState('');
+  const [keyLoading,    setKeyLoading]    = useState(false);
+  const [cities,        setCities]        = useState([]);
+  const [selectedCities, setSelectedCities] = useState(new Set());
+  const [savedApiKey,   setSavedApiKey]   = useState('');
 
   const fadeIn = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     Animated.timing(fadeIn, { toValue: 1, duration: 400, useNativeDriver: true }).start();
-    run();
+    runPhase1();
   }, []);
 
-  // Cycle through step labels while generating
+  // Cycle step labels during loading phases
   useEffect(() => {
-    if (phase !== 'generating') return;
+    if (phase !== 'generating_cities' && phase !== 'generating_route') return;
     const t = setInterval(() => {
       setStepIdx((i) => {
         const next = (i + 1) % STEPS.length;
@@ -177,20 +225,24 @@ export default function GeneratingScreen({ navigation, route }) {
     return () => clearInterval(t);
   }, [phase]);
 
-  const run = useCallback(async (overrideKey) => {
+  // Phase 1: get city list
+  const runPhase1 = useCallback(async (overrideKey) => {
     try {
-      setPhase('generating');
+      setPhase('generating_cities');
       const apiKey = overrideKey || await getApiKey();
       if (!apiKey) { setPhase('key_needed'); return; }
 
-      const result = await generateAIRoute(
-        preferences,
-        apiKey,
-        (msg) => setStatus(msg),
-      );
+      const cityList = await generateCityList(preferences, apiKey, (msg) => setStatus(msg));
 
-      setTripFromAI(preferences, result);
-      navigation.replace(Routes.MAIN);
+      if (cityList.length > 0) {
+        setSavedApiKey(apiKey);
+        setCities(cityList);
+        setSelectedCities(new Set(cityList));
+        setPhase('city_selection');
+      } else {
+        // No cities returned — skip to full route directly
+        await runPhase2(apiKey, null);
+      }
     } catch (err) {
       if (err.message === 'API_KEY_MISSING' || err.message === 'API_KEY_INVALID') {
         setPhase('key_needed');
@@ -201,22 +253,58 @@ export default function GeneratingScreen({ navigation, route }) {
     }
   }, [preferences]);
 
+  // Phase 2: generate full route with selected cities
+  const runPhase2 = useCallback(async (apiKey, selCities) => {
+    try {
+      setPhase('generating_route');
+      const key = apiKey || savedApiKey;
+      const selectedArr = selCities ? Array.from(selCities) : null;
+      const prefs = selectedArr ? { ...preferences, selectedCities: selectedArr } : preferences;
+
+      const result = await generateAIRoute(prefs, key, (msg) => setStatus(msg));
+      setTripFromAI(preferences, result);
+      navigation.replace(Routes.MAIN);
+    } catch (err) {
+      if (err.message === 'API_KEY_MISSING' || err.message === 'API_KEY_INVALID') {
+        setPhase('key_needed');
+      } else {
+        setPhase('error');
+        setErrorMsg(err.message || 'Bilinmeyen hata');
+      }
+    }
+  }, [preferences, savedApiKey]);
+
+  const handleToggleCity = useCallback((city) => {
+    setSelectedCities((prev) => {
+      const next = new Set(prev);
+      if (next.has(city)) next.delete(city);
+      else next.add(city);
+      return next;
+    });
+  }, []);
+
+  const handleConfirmCities = useCallback(() => {
+    runPhase2(savedApiKey, selectedCities);
+  }, [savedApiKey, selectedCities, runPhase2]);
+
   const handleKeySubmit = async (key) => {
     setKeyLoading(true);
     await saveApiKey(key);
     setKeyLoading(false);
-    run(key);
+    runPhase1(key);
   };
 
-  const handleRetry = () => run();
+  const handleRetry = () => runPhase1();
+
+  const isLoading = phase === 'generating_cities' || phase === 'generating_route';
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="light-content" backgroundColor={Colors.primaryDark} />
       <Animated.View style={[styles.container, { opacity: fadeIn }]}>
 
-        {/* ── Generating phase ── */}
-        {phase === 'generating' && (
+        {/* ── Loading phases ── */}
+        {isLoading && (
           <View style={styles.center}>
             <Text style={styles.aiLabel}>✨ AI Rota Oluşturucu</Text>
             <RouteAnimation
@@ -226,10 +314,22 @@ export default function GeneratingScreen({ navigation, route }) {
             <Text style={styles.statusText}>{status}</Text>
             <DotLoader />
             <Text style={styles.hint}>
-              Claude AI şehirleri, gerçek mekanları ve{'\n'}
-              konaklama yerlerini seçiyor...
+              {phase === 'generating_cities'
+                ? 'Güzergah şehirleri belirleniyor...'
+                : 'Claude AI gerçek mekanları ve\nkonaklama alternatiflerini seçiyor...'}
             </Text>
           </View>
+        )}
+
+        {/* ── City selection ── */}
+        {phase === 'city_selection' && (
+          <CitySelection
+            cities={cities}
+            selectedCities={selectedCities}
+            onToggle={handleToggleCity}
+            onConfirm={handleConfirmCities}
+            preferences={preferences}
+          />
         )}
 
         {/* ── API key needed ── */}
@@ -254,7 +354,6 @@ export default function GeneratingScreen({ navigation, route }) {
             <TouchableOpacity
               style={styles.offlineBtn}
               onPress={() => {
-                // Use offline mock generator
                 const { generateRoute } = require('../utils/routeGenerator');
                 const result = generateRoute(preferences);
                 setTripFromAI(preferences, result);
@@ -275,7 +374,7 @@ export default function GeneratingScreen({ navigation, route }) {
 // ─── Styles ───────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: Colors.primaryDark },
+  safeArea:  { flex: 1, backgroundColor: Colors.primaryDark },
   container: { flex: 1 },
   center: {
     flex: 1,
@@ -314,8 +413,8 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.md,
     ...Shadow.sm,
   },
-  retryText: { fontSize: Typography.size.base, fontWeight: Typography.weight.bold, color: '#FFFFFF' },
-  offlineBtn: { paddingVertical: Spacing.sm },
+  retryText:   { fontSize: Typography.size.base, fontWeight: Typography.weight.bold, color: '#FFFFFF' },
+  offlineBtn:  { paddingVertical: Spacing.sm },
   offlineText: { fontSize: Typography.size.sm, color: Colors.primaryLight, textDecorationLine: 'underline' },
 });
 
@@ -326,11 +425,8 @@ const dotStyles = StyleSheet.create({
 
 const routeAnim = StyleSheet.create({
   container: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    width: '100%',
-    paddingHorizontal: Spacing.lg,
-    gap: Spacing.sm,
+    flexDirection: 'row', alignItems: 'center',
+    width: '100%', paddingHorizontal: Spacing.lg, gap: Spacing.sm,
   },
   startPin:  { alignItems: 'center', width: 64 },
   endPin:    { alignItems: 'center', width: 64 },
@@ -347,25 +443,72 @@ const keyStyles = StyleSheet.create({
   title: { fontSize: Typography.size.xl, fontWeight: Typography.weight.bold, color: '#FFFFFF' },
   desc:  { fontSize: Typography.size.sm, color: Colors.primaryLight, textAlign: 'center', lineHeight: 22, opacity: 0.85 },
   input: {
-    width: '100%',
-    height: 56,
+    width: '100%', height: 56,
     backgroundColor: 'rgba(255,255,255,0.12)',
-    borderRadius: Radius.xl,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.25)',
+    borderRadius: Radius.xl, borderWidth: 1, borderColor: 'rgba(255,255,255,0.25)',
     paddingHorizontal: Spacing.md,
-    fontSize: Typography.size.base,
-    color: '#FFFFFF',
+    fontSize: Typography.size.base, color: '#FFFFFF',
     fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
   },
   btn: {
-    width: '100%',
-    height: 52,
-    backgroundColor: Colors.primary,
-    borderRadius: Radius.xl,
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...Shadow.sm,
+    width: '100%', height: 52, backgroundColor: Colors.primary,
+    borderRadius: Radius.xl, alignItems: 'center', justifyContent: 'center', ...Shadow.sm,
   },
   btnText: { fontSize: Typography.size.base, fontWeight: Typography.weight.bold, color: '#FFFFFF' },
+});
+
+const cityStyles = StyleSheet.create({
+  container: {
+    flexGrow: 1, padding: Spacing.xl, alignItems: 'center', gap: Spacing.md,
+    paddingTop: Spacing.xxl,
+  },
+  title: {
+    fontSize: Typography.size.xxl, fontWeight: Typography.weight.extrabold,
+    color: '#FFFFFF', textAlign: 'center',
+  },
+  subtitle: {
+    fontSize: Typography.size.sm, color: Colors.primaryLight,
+    textAlign: 'center', opacity: 0.9,
+  },
+  hint: {
+    fontSize: Typography.size.sm, color: Colors.primaryLight,
+    textAlign: 'center', opacity: 0.7, lineHeight: 20,
+  },
+  chipsWrap: {
+    flexDirection: 'row', flexWrap: 'wrap',
+    gap: Spacing.sm, justifyContent: 'center', width: '100%',
+    marginTop: Spacing.sm,
+  },
+  chip: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingHorizontal: 16, paddingVertical: 10,
+    borderRadius: Radius.full,
+    backgroundColor: 'rgba(255,255,255,0.10)',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.20)',
+  },
+  chipSelected: {
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
+  },
+  chipNum: {
+    fontSize: Typography.size.xs, fontWeight: Typography.weight.bold,
+    color: Colors.primaryLight, minWidth: 16, textAlign: 'center',
+  },
+  chipNumSel: { color: '#FFFFFF' },
+  chipText: {
+    fontSize: Typography.size.base, fontWeight: Typography.weight.semibold,
+    color: Colors.primaryLight,
+  },
+  chipTextSel: { color: '#FFFFFF' },
+  selectedCount: {
+    fontSize: Typography.size.sm, color: Colors.primaryLight, opacity: 0.7,
+  },
+  confirmBtn: {
+    width: '100%', height: 56, backgroundColor: Colors.primary,
+    borderRadius: Radius.xl, alignItems: 'center', justifyContent: 'center',
+    marginTop: Spacing.sm, ...Shadow.sm,
+  },
+  confirmBtnText: {
+    fontSize: Typography.size.base, fontWeight: Typography.weight.bold, color: '#FFFFFF',
+  },
 });

@@ -313,8 +313,14 @@ export default function DashboardScreen({ navigation }) {
               key={dayPlan.day}
               dayPlan={dayPlan}
               isExpanded={dayPlan.day === 1}
-              onActivityPress={(activity) =>
-                navigation.navigate(Routes.ACTIVITY_DETAIL, { activity, dayTitle: dayPlan.title })
+              onActivityPress={(activity, activityIndex) =>
+                navigation.navigate(Routes.ACTIVITY_DETAIL, {
+                  activity,
+                  dayTitle:       dayPlan.title,
+                  dayLocation:    dayPlan.location,
+                  dayIndex:       dayPlan.day - 1,
+                  activityIndex,
+                })
               }
             />
           ))}

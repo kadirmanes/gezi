@@ -267,7 +267,7 @@ function StepDates({ startDate, endDate, onDatesChange }) {
   );
 }
 
-function StepAccommodation({ value, onChange }) {
+function StepAccommodation({ value, onChange, includeMeals, onToggleMeals }) {
   return (
     <View style={[sStyles.stepContent, { gap: Spacing.sm }]}>
       {ACCOMMODATION_OPTIONS.map((opt) => {
@@ -290,6 +290,26 @@ function StepAccommodation({ value, onChange }) {
           </TouchableOpacity>
         );
       })}
+
+      {/* Meal recommendations toggle */}
+      <TouchableOpacity
+        style={[sStyles.mealToggle, includeMeals && sStyles.mealToggleActive]}
+        onPress={() => onToggleMeals(!includeMeals)}
+        activeOpacity={0.8}
+      >
+        <Text style={sStyles.mealToggleEmoji}>🍽️</Text>
+        <View style={sStyles.mealToggleText}>
+          <Text style={sStyles.mealToggleLabel}>Restoran Önerileri</Text>
+          <Text style={sStyles.mealToggleDesc}>
+            {includeMeals
+              ? 'Kahvaltı, öğle ve akşam yemeği planınıza dahil'
+              : 'Yemeği kendim hallederim (karavan/çadır mutfağı)'}
+          </Text>
+        </View>
+        <View style={[sStyles.toggleSwitch, includeMeals && sStyles.toggleSwitchOn]}>
+          <View style={[sStyles.toggleThumb, includeMeals && sStyles.toggleThumbOn]} />
+        </View>
+      </TouchableOpacity>
     </View>
   );
 }
@@ -357,6 +377,7 @@ export default function OnboardingScreen({ navigation }) {
   const [accommodation, setAccommodation] = useState('caravan');
   const [budget,        setBudget]        = useState('standart');
   const [interests,     setInterests]     = useState([]);
+  const [includeMeals,  setIncludeMeals]  = useState(true);
 
   const slideX  = useRef(new Animated.Value(0)).current;
   const opacity = useRef(new Animated.Value(1)).current;
@@ -406,6 +427,7 @@ export default function OnboardingScreen({ navigation }) {
         accommodationType: accommodation,
         budget,
         interests,
+        includeMeals,
       };
       // Navigate to GeneratingScreen — it handles AI call and then goes to MAIN
       navigation.navigate(Routes.GENERATING, { preferences: prefs });
@@ -427,7 +449,7 @@ export default function OnboardingScreen({ navigation }) {
       case 'dates':
         return <StepDates startDate={startDate} endDate={endDate} onDatesChange={(s, e) => { setStartDate(s); setEndDate(e); }} />;
       case 'accom':
-        return <StepAccommodation value={accommodation} onChange={setAccommodation} />;
+        return <StepAccommodation value={accommodation} onChange={setAccommodation} includeMeals={includeMeals} onToggleMeals={setIncludeMeals} />;
       case 'budget':
         return <StepBudget value={budget} onChange={setBudget} />;
       case 'interests':
@@ -579,6 +601,28 @@ const sStyles = StyleSheet.create({
   accomText:  { flex: 1 },
   accomLabel: { fontSize: Typography.size.md, fontWeight: Typography.weight.bold, color: Colors.textPrimary },
   accomDesc:  { fontSize: Typography.size.xs, color: Colors.textTertiary, marginTop: 2 },
+
+  // Meal toggle
+  mealToggle: {
+    flexDirection: 'row', alignItems: 'center', borderRadius: Radius.xl,
+    borderWidth: 1.5, borderColor: Colors.border, padding: Spacing.md, gap: Spacing.md,
+    backgroundColor: Colors.surface,
+  },
+  mealToggleActive: { borderColor: Colors.primary, backgroundColor: Colors.primaryFaded },
+  mealToggleEmoji: { fontSize: 28 },
+  mealToggleText: { flex: 1 },
+  mealToggleLabel: { fontSize: Typography.size.base, fontWeight: Typography.weight.bold, color: Colors.textPrimary },
+  mealToggleDesc: { fontSize: Typography.size.xs, color: Colors.textTertiary, marginTop: 2 },
+  toggleSwitch: {
+    width: 44, height: 26, borderRadius: 13, backgroundColor: Colors.border,
+    justifyContent: 'center', paddingHorizontal: 2,
+  },
+  toggleSwitchOn: { backgroundColor: Colors.primary },
+  toggleThumb: {
+    width: 22, height: 22, borderRadius: 11, backgroundColor: '#FFFFFF',
+    ...Shadow.sm, alignSelf: 'flex-start',
+  },
+  toggleThumbOn: { alignSelf: 'flex-end' },
 
   // Budget
   budgetCard:  { flexDirection: 'row', alignItems: 'center', borderRadius: Radius.xl, borderWidth: 1.5, padding: Spacing.md, gap: Spacing.md },
