@@ -76,7 +76,7 @@ function buildPrompt(prefs) {
     : `YEMEK MOLALARI:
 - Her gün öğle (12:30) ve akşam (19:30) için tag: "Yemek" aktivite ekle. Genel öneri yeterli, gerçek restoran zorunlu değil.`;
 
-  return `Sen Türkiye ve Avrupa'yı çok iyi bilen deneyimli bir seyahat rehberisin.
+  return `Sen Türkiye ve Avrupa'yı iyi bilen bir seyahat rehberisin.
 
 ${routeInstruction}
 Tarihler: ${startDate} → ${endDate}
@@ -84,64 +84,18 @@ Bütçe: ${budgetLabel}
 İlgi alanları: ${interestStr}${visitedNote}
 
 KURALLAR:
-1. Her gün FARKLI bir şehirde geç — coğrafi açıdan mantıklı güzergah izle.
-2. Her aktivitenin başlığında o şehrin GERÇEK mekan adını kullan (örn. "Sümela Manastırı Turu").
-3. Her aktivitenin "description" alanına o yer hakkında 2-3 cümle gerçek bilgi yaz.
-4. Her gün 16:00'da "Serbest Zaman & Alışveriş" aktivitesi ekle: o şehrin gerçek çarşısı/pazarı/AVM adını kullan. Description'a yakınındaki bir kafe öner. Tag: "Serbest".
-5. Her gün için 3 FARKLI konaklama seçeneği sun: biri kamp/karavan, biri otel/pansiyon, biri kiralık daire.
-6. Konaklama maliyetleri bütçeye uygun olsun.
-7. Aktivite "tag" değerleri şunlardan biri olsun: Kültür, Doğa, Yemek, Akşam, Aktivite, Sabah, Huzur, Keşif, Macera, Gastronomi, Premium, Serbest.
-8. Her gün minimum 6, maksimum 8 aktivite olsun.
+1. Her gün FARKLI bir şehirde geç, coğrafi sıra izle.
+2. Her aktivite başlığında GERÇEK mekan adı kullan.
+3. Her aktivitenin "description" alanı: 1 kısa cümle (max 12 kelime).
+4. Her gün 16:00'da "Serbest Zaman & Alışveriş" ekle: gerçek çarşı/pazar/AVM adı, tag: "Serbest".
+5. Her gün 3 konaklama seçeneği: kamp, otel, kiralık. Sadece name+address(kısa)+cost+note.
+6. Tag şunlardan biri: Kültür, Doğa, Yemek, Akşam, Aktivite, Sabah, Huzur, Keşif, Macera, Gastronomi, Premium, Serbest.
+7. Günde tam 6 aktivite.
 ${mealRules}
 
-SADECE aşağıdaki JSON formatında yanıt ver. Başka hiçbir şey yazma:
+SADECE JSON yanıt ver:
 
-{
-  "route": [
-    {
-      "day": 1,
-      "location": "Şehir adı",
-      "lat": 39.9334,
-      "lng": 32.8597,
-      "activities": [
-        {
-          "time": "09:00",
-          "title": "Gerçek mekan adı içeren aktivite başlığı",
-          "tag": "Kültür",
-          "cost": "Ücretsiz",
-          "description": "Bu yer hakkında 2-3 cümle gerçek bilgi.",
-          "address": "Mekanın adresi veya semti (özellikle yemek için)"
-        }
-      ],
-      "accommodationOptions": [
-        {
-          "type": "kamp",
-          "name": "Kamp alanı veya karavan parkı adı",
-          "address": "Adres veya semt",
-          "cost": "₺xxx/gece",
-          "facilities": "Elektrik, su, duş",
-          "note": "Kısa pratik not"
-        },
-        {
-          "type": "otel",
-          "name": "Otel veya pansiyon adı",
-          "address": "Adres veya semt",
-          "cost": "₺xxx/gece",
-          "facilities": "Kahvaltı dahil, ücretsiz Wi-Fi",
-          "note": "Kısa pratik not"
-        },
-        {
-          "type": "kiralık",
-          "name": "Kiralık daire / mahalle",
-          "address": "Mahalle veya semt",
-          "cost": "₺xxx/gece",
-          "facilities": "Mutfak, çamaşır makinesi",
-          "note": "Kısa pratik not"
-        }
-      ]
-    }
-  ]
-}`;
+{"route":[{"day":1,"location":"Şehir","lat":39.9,"lng":32.8,"activities":[{"time":"09:00","title":"Mekan Adı","tag":"Kültür","cost":"Ücretsiz","description":"1 cümle bilgi.","address":"Semt (yemek için)"}],"accommodationOptions":[{"type":"kamp","name":"Kamp adı","address":"Semt","cost":"₺xx/gece","note":"Not"},{"type":"otel","name":"Otel adı","address":"Semt","cost":"₺xx/gece","note":"Not"},{"type":"kiralık","name":"Daire/mahalle","address":"Semt","cost":"₺xx/gece","note":"Not"}]}]}`;
 }
 
 // ─── JSON extractor ───────────────────────────────────────────────────────
@@ -205,17 +159,27 @@ SADECE şu JSON formatında yanıt ver:
   }
 }
 
-// ─── Phase 2: full route generation ──────────────────────────────────────
+// ─── Phase 2: full route generation (with auto-batching for long trips) ──
+
+const BATCH_SIZE = 5; // max days per API call
 
 export async function generateAIRoute(preferences, apiKey, onProgress) {
   if (!apiKey) throw new Error('API_KEY_MISSING');
 
-  onProgress?.('Yapay zeka rotanı analiz ediyor...');
-
-  // Load visited places and inject into prompt
   const visitedPlaces = await getVisitedPlaces();
   const prefs = { ...preferences, visitedPlaces };
 
+  const cities = prefs.selectedCities;
+
+  // Auto-batch: if more than BATCH_SIZE cities, split into multiple calls
+  if (cities && cities.length > BATCH_SIZE) {
+    return _generateBatched(prefs, apiKey, onProgress);
+  }
+
+  return _generateSingle(prefs, apiKey, onProgress, 0);
+}
+
+async function _callAPI(prefs, apiKey) {
   const response = await fetch(ANTHROPIC_URL, {
     method: 'POST',
     headers: {
@@ -236,35 +200,68 @@ export async function generateAIRoute(preferences, apiKey, onProgress) {
     throw new Error(err?.error?.message || `HTTP ${response.status}`);
   }
 
-  onProgress?.('Şehirler ve mekanlar seçiliyor...');
-
   const data = await response.json();
   const stopReason = data?.stop_reason;
   const text = data?.content?.[0]?.text || '';
 
-  console.log('[generateAIRoute] stop_reason:', stopReason, '| chars:', text.length);
-  if (text.length > 0) console.log('[generateAIRoute] tail:', text.slice(-120));
+  console.log('[_callAPI] stop_reason:', stopReason, '| chars:', text.length);
 
   if (stopReason === 'max_tokens') {
-    throw new Error('AI yanıtı token limitini aştı. Gün sayısını azalt veya tercihlerini basitleştir.');
+    throw new Error('AI yanıtı token limitini aştı. Seçili şehir sayısını azalt.');
   }
-
-  onProgress?.('Konaklama alternatifleri oluşturuluyor...');
 
   let parsed;
   try {
     parsed = extractJSON(text);
   } catch (parseErr) {
-    console.error('[generateAIRoute] extractJSON failed:', parseErr.message);
+    console.error('[_callAPI] extractJSON failed:', parseErr.message, '| tail:', text.slice(-80));
     throw parseErr;
   }
 
   if (!parsed?.route?.length) {
-    console.error('[generateAIRoute] no route in parsed:', JSON.stringify(parsed)?.slice(0, 300));
+    console.error('[_callAPI] no route:', JSON.stringify(parsed)?.slice(0, 200));
     throw new Error('Geçersiz AI yanıtı — route alanı bulunamadı');
   }
 
-  return normalizeAIResponse(parsed.route, preferences);
+  return parsed.route;
+}
+
+async function _generateSingle(prefs, apiKey, onProgress, dayOffset) {
+  onProgress?.('Rota oluşturuluyor...');
+  const route = await _callAPI(prefs, apiKey);
+
+  // Adjust day numbers if this is a batch continuation
+  if (dayOffset > 0) {
+    route.forEach((d) => { d.day = d.day + dayOffset; });
+  }
+
+  return normalizeAIResponse(route, prefs);
+}
+
+async function _generateBatched(prefs, apiKey, onProgress) {
+  const cities = prefs.selectedCities;
+  const batches = [];
+  for (let i = 0; i < cities.length; i += BATCH_SIZE) {
+    batches.push(cities.slice(i, i + BATCH_SIZE));
+  }
+
+  const allDays = [];
+  let dayOffset = 0;
+
+  for (let i = 0; i < batches.length; i++) {
+    onProgress?.(`Rota oluşturuluyor (${i + 1}/${batches.length})...`);
+    const batchPrefs = {
+      ...prefs,
+      selectedCities: batches[i],
+      days: batches[i].length,
+    };
+    const route = await _callAPI(batchPrefs, apiKey);
+    route.forEach((d) => { d.day = d.day + dayOffset; });
+    allDays.push(...route);
+    dayOffset += batches[i].length;
+  }
+
+  return normalizeAIResponse(allDays, prefs);
 }
 
 // ─── Single activity replacement ─────────────────────────────────────────
