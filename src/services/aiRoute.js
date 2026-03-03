@@ -158,7 +158,7 @@ function buildPrompt(prefs) {
     startLocation, destination, startDate, endDate, days,
     accommodationType, budget, interests, includeMeals,
     selectedCities, dayPlan, visitedPlaces, previousCity,
-    vehicleProfile, weatherMap, tripPace,
+    vehicleProfile, weatherMap, tripPace, returnTrip, mustVisit,
   } = prefs;
 
   const accomLabel  = ACCOM_LABELS[accommodationType] || accommodationType;
@@ -198,6 +198,15 @@ function buildPrompt(prefs) {
 
   // Weather context
   const weatherContext = weatherMap ? buildWeatherPromptContext(weatherMap) : '';
+
+  // Return trip & must-visit context
+  const returnNote = returnTrip
+    ? `GİDİŞ-DÖNÜŞ YOLCULUĞU: Son günlerde ${startLocation}'a geri dönüş planla; dönüş rotasındaki şehirlere de aktivite ekle.`
+    : `TEK YÖNLÜyolculuk: Rota ${destination}'da veya son günün konaklamasında biter. ${startLocation}'a geri dönüş aktivitesi EKLEME.`;
+
+  const mustVisitNote = (mustVisit || []).length > 0
+    ? `ZORUNLU ARA DURAKLAR — bu şehirler rotadan çıkarılamaz, her biri için mutlaka aktivite planla: ${mustVisit.join(', ')}`
+    : '';
 
   const day1Origin = previousCity || startLocation;
 
@@ -264,6 +273,8 @@ Araç: ${vehicleDesc}
 Bütçe: ${budgetLabel}
 İlgi: ${interestStr}${visitedNote}${prevCityNote}${weatherContext}${algorithmContext}
 
+${returnNote}
+${mustVisitNote}
 ${routeRules}
 
 AKTİVİTE SÜRE KURALLARI (bu süreleri geçme):
@@ -333,7 +344,7 @@ export async function generateCityList(preferences, apiKey, onProgress) {
 
   const {
     startLocation, destination, days,
-    interests, accommodationType, budget, tripPace,
+    interests, accommodationType, budget, tripPace, returnTrip, mustVisit,
   } = preferences;
 
   const interestStr = (interests || []).length > 0 ? interests.join(', ') : 'genel keşif';
@@ -347,8 +358,18 @@ export async function generateCityList(preferences, apiKey, onProgress) {
       ? 'Az şehir, uzun konaklama. Her şehirde en az 1 tam gün. Zorla doldurma, şehirler arasında acele etme.'
       : 'Dengeli: öne çıkan şehirler + kısa geçiş durakları.';
 
+  const returnNote = returnTrip
+    ? `GİDİŞ-DÖNÜŞ: Son günlerde ${startLocation}'a geri dönüş planla, dönüş yolundaki şehirleri de ekle.`
+    : `TEK YÖNLÜyolculuk: Rota ${destination}'da veya yakınında biter. ${startLocation}'a geri dönüş GEREKMİYOR.`;
+
+  const mustVisitNote = (mustVisit || []).length > 0
+    ? `ZORUNLU ARA DURAKLAR (atlanamaz, mutlaka dahil et): ${mustVisit.join(', ')}`
+    : '';
+
   const prompt = `${startLocation}'dan ${destination}'a ${days} günlük tatil planla.
 Kullanıcı profili: ${interestStr} | ${accomLabel} | ${budgetLabel} | tempo: ${tripPace || 'dengeli'}
+${returnNote}
+${mustVisitNote}
 
 Her şehire BU KULLANICININ yapabileceği aktivite sayısına göre süre ver:
 - İlgisine uyan az aktivite olan şehir → 2-4 saat (isStopover: true)

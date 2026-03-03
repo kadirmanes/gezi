@@ -72,8 +72,9 @@ const nsStyles = StyleSheet.create({
 
 // ─── Step: Araç Profili ────────────────────────────────────────────────────
 
-function StepVehicle({ profile, onChange, includeMeals, onToggleMeals }) {
-  const { Switch } = require('react-native');
+function StepVehicle({ profile, onChange, includeMeals, onToggleMeals, returnTrip, onToggleReturn, mustVisit, onMustVisitChange }) {
+  const { Switch, TextInput } = require('react-native');
+  const [cityInput, setCityInput] = useState('');
   const selected = VEHICLE_TYPES.find((v) => v.id === profile.vehicleType);
   const isCaravan = selected && selected.accom === 'caravan';
 
@@ -86,6 +87,16 @@ function StepVehicle({ profile, onChange, includeMeals, onToggleMeals }) {
       persons:   vt.defaults.persons,
     });
   };
+
+  const addCity = () => {
+    const trimmed = cityInput.trim();
+    if (trimmed && !mustVisit.includes(trimmed)) {
+      onMustVisitChange([...mustVisit, trimmed]);
+    }
+    setCityInput('');
+  };
+
+  const removeCity = (city) => onMustVisitChange(mustVisit.filter((c) => c !== city));
 
   return (
     <View style={sStyles.stepContent}>
@@ -134,7 +145,7 @@ function StepVehicle({ profile, onChange, includeMeals, onToggleMeals }) {
         </View>
       )}
 
-      {/* Meal toggle (same as accom step) */}
+      {/* Meal toggle */}
       <TouchableOpacity
         style={[sStyles.mealToggle, includeMeals && sStyles.mealToggleActive]}
         onPress={() => onToggleMeals(!includeMeals)}
@@ -151,6 +162,55 @@ function StepVehicle({ profile, onChange, includeMeals, onToggleMeals }) {
           <View style={[sStyles.toggleThumb, includeMeals && sStyles.toggleThumbOn]} />
         </View>
       </TouchableOpacity>
+
+      {/* Return trip toggle */}
+      <TouchableOpacity
+        style={[sStyles.mealToggle, returnTrip && sStyles.mealToggleActive]}
+        onPress={() => onToggleReturn(!returnTrip)}
+        activeOpacity={0.8}
+      >
+        <Text style={sStyles.mealToggleEmoji}>🔄</Text>
+        <View style={sStyles.mealToggleText}>
+          <Text style={sStyles.mealToggleLabel}>Dönüşü de Geze Geze Yap</Text>
+          <Text style={sStyles.mealToggleDesc}>
+            {returnTrip ? 'Dönüşte farklı rota — gidiş-dönüş planı' : 'Tek yönlü — sadece gidiş planı'}
+          </Text>
+        </View>
+        <View style={[sStyles.toggleSwitch, returnTrip && sStyles.toggleSwitchOn]}>
+          <View style={[sStyles.toggleThumb, returnTrip && sStyles.toggleThumbOn]} />
+        </View>
+      </TouchableOpacity>
+
+      {/* Must-visit waypoints */}
+      <View style={sStyles.mustVisitBox}>
+        <Text style={sStyles.mustVisitLabel}>📍 Mutlaka Uğramak İstediğin Ara Durak</Text>
+        <View style={sStyles.mustVisitRow}>
+          <TextInput
+            style={sStyles.mustVisitInput}
+            value={cityInput}
+            onChangeText={setCityInput}
+            placeholder="Kastamonu, Trabzon..."
+            placeholderTextColor={Colors.textTertiary}
+            onSubmitEditing={addCity}
+            returnKeyType="done"
+          />
+          <TouchableOpacity style={sStyles.mustVisitAddBtn} onPress={addCity} activeOpacity={0.8}>
+            <Text style={sStyles.mustVisitAddText}>Ekle</Text>
+          </TouchableOpacity>
+        </View>
+        {mustVisit.length > 0 && (
+          <View style={sStyles.mustVisitChips}>
+            {mustVisit.map((city) => (
+              <View key={city} style={sStyles.mustVisitChip}>
+                <Text style={sStyles.mustVisitChipText}>{city}</Text>
+                <TouchableOpacity onPress={() => removeCity(city)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+                  <Text style={sStyles.mustVisitChipX}>×</Text>
+                </TouchableOpacity>
+              </View>
+            ))}
+          </View>
+        )}
+      </View>
     </View>
   );
 }
@@ -725,6 +785,8 @@ export default function OnboardingScreen({ navigation }) {
   const [budget,         setBudget]         = useState('standart');
   const [interests,      setInterests]      = useState([]);
   const [includeMeals,   setIncludeMeals]   = useState(true);
+  const [returnTrip,     setReturnTrip]     = useState(false);
+  const [mustVisit,      setMustVisit]      = useState([]);
   const [tripPace,       setTripPace]       = useState('dengeli');
   const [presetRoute,    setPresetRoute]    = useState(null);
 
@@ -787,11 +849,13 @@ export default function OnboardingScreen({ navigation }) {
         budget,
         interests,
         includeMeals,
+        returnTrip,
+        mustVisit,
         tripPace,
       };
       navigation.navigate(Routes.GENERATING, { preferences: prefs });
     }
-  }, [canProceed, isLast, startLocation, destination, startDate, endDate, computedDays, accommodation, vehicleProfile, budget, interests, includeMeals, tripPace]);
+  }, [canProceed, isLast, startLocation, destination, startDate, endDate, computedDays, accommodation, vehicleProfile, budget, interests, includeMeals, returnTrip, mustVisit, tripPace]);
 
   const goBack = useCallback(() => {
     if (stepIndex > 0) animate(-1, () => setStepIndex((i) => i - 1));
@@ -825,7 +889,7 @@ export default function OnboardingScreen({ navigation }) {
       case 'accom':
         return <StepAccommodation value={accommodation} onChange={setAccommodation} includeMeals={includeMeals} onToggleMeals={setIncludeMeals} />;
       case 'vehicle':
-        return <StepVehicle profile={vehicleProfile} onChange={setVehicleProfile} includeMeals={includeMeals} onToggleMeals={setIncludeMeals} />;
+        return <StepVehicle profile={vehicleProfile} onChange={setVehicleProfile} includeMeals={includeMeals} onToggleMeals={setIncludeMeals} returnTrip={returnTrip} onToggleReturn={setReturnTrip} mustVisit={mustVisit} onMustVisitChange={setMustVisit} />;
       case 'budget':
         return <StepBudget value={budget} onChange={setBudget} />;
       case 'interests':
@@ -1034,4 +1098,16 @@ const sStyles = StyleSheet.create({
   interestChip: { paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm + 2, borderRadius: Radius.full, borderWidth: 1.5, borderColor: Colors.border, backgroundColor: Colors.surface },
   interestText: { fontSize: Typography.size.base, color: Colors.textSecondary },
   skipHint:     { textAlign: 'center', fontSize: Typography.size.sm, color: Colors.textTertiary, marginTop: Spacing.md },
+
+  // Must-visit waypoints
+  mustVisitBox:      { borderRadius: Radius.xl, borderWidth: 1.5, borderColor: Colors.border, backgroundColor: Colors.surface, padding: Spacing.md, gap: Spacing.sm },
+  mustVisitLabel:    { fontSize: Typography.size.sm, fontWeight: Typography.weight.semibold, color: Colors.textSecondary },
+  mustVisitRow:      { flexDirection: 'row', gap: Spacing.sm, alignItems: 'center' },
+  mustVisitInput:    { flex: 1, height: 40, borderRadius: Radius.lg, borderWidth: 1.5, borderColor: Colors.border, paddingHorizontal: Spacing.sm, fontSize: Typography.size.base, color: Colors.textPrimary, backgroundColor: Colors.background },
+  mustVisitAddBtn:   { height: 40, paddingHorizontal: Spacing.md, borderRadius: Radius.lg, backgroundColor: Colors.primary, justifyContent: 'center', alignItems: 'center' },
+  mustVisitAddText:  { fontSize: Typography.size.sm, fontWeight: Typography.weight.bold, color: '#FFFFFF' },
+  mustVisitChips:    { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  mustVisitChip:     { flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 4, paddingLeft: 10, paddingRight: 6, borderRadius: Radius.full, backgroundColor: Colors.primaryFaded, borderWidth: 1, borderColor: Colors.primary },
+  mustVisitChipText: { fontSize: Typography.size.sm, fontWeight: Typography.weight.semibold, color: Colors.primary },
+  mustVisitChipX:    { fontSize: 18, lineHeight: 20, color: Colors.primary, fontWeight: Typography.weight.bold },
 });
