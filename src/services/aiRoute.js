@@ -288,16 +288,29 @@ export async function generateCityList(preferences, apiKey, onProgress) {
 
   onProgress?.('Güzergah planlanıyor...');
 
-  const { startLocation, destination, days } = preferences;
-  const prompt = `${startLocation}'dan ${destination}'a ${days} günlük tatil planla.
+  const {
+    startLocation, destination, days,
+    interests, accommodationType, budget,
+  } = preferences;
 
-Her şehire turistik değerine göre süre ver — Çankırı gibi yerlerde 2-3 saat yeterli, Kapadokya/Antalya gibi yerlerde tam gün.
-- 2-4 saat: geçiş durağı (isStopover: true)
-- 5-10 saat: konaklama (isStopover: false)
+  const interestStr = (interests || []).length > 0 ? interests.join(', ') : 'genel keşif';
+  const accomLabel  = ACCOM_LABELS[accommodationType] || accommodationType || 'araç';
+  const budgetLabel = BUDGET_LABELS[budget] || budget || 'standart';
+
+  const prompt = `${startLocation}'dan ${destination}'a ${days} günlük tatil planla.
+Kullanıcı profili: ${interestStr} | ${accomLabel} | ${budgetLabel}
+
+Her şehire o şehirde BU KULLANICININ yapabileceği aktivite sayısına göre süre ver:
+- Kullanıcının ilgisine uyan az aktivite olan şehir → 2-4 saat (isStopover: true)
+- Kullanıcının ilgisine uyan çok aktivite olan şehir → 5-10 saat (isStopover: false, konaklama)
+- Çok zengin destinasyon (Kapadokya, Antalya gibi) → 8-10 saat veya üzeri
+
+Örnek: "doğa, kamp" seven biri için Kapadokya 10 saat (yürüyüş, balon, ATV), Çankırı 2 saat (geçiş).
+Örnek: "tarih, kültür" seven biri için Safranbolu 8 saat (konaklar, han), Çankırı 3 saat (kale, geçiş).
 
 Toplam ${days} geceleme olsun. ${startLocation} dahil etme.
 
-COMPACT JSON (boşluk/satır sonu kullanma):
+SADECE COMPACT JSON (boşluk/satır sonu yok):
 {"dayPlan":[{"day":1,"overnightCity":"A","stops":[{"city":"X","hours":3,"isStopover":true},{"city":"A","hours":7,"isStopover":false}]},{"day":2,"overnightCity":"B","stops":[{"city":"B","hours":8,"isStopover":false}]}]}`;
 
   const response = await fetch(ANTHROPIC_URL, {
