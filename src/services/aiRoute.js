@@ -249,14 +249,35 @@ Bütçe: ${budgetLabel}
 
 ${routeRules}
 
+AKTİVİTE SÜRE KURALLARI (bu süreleri geçme):
+- Müze / tarihi yapı ziyareti: 45-90 dk
+- Eski şehir / tarihi çarşı turu: 90-150 dk (tüm çarşı için MAX 2.5 saat)
+- Doğa gezisi (şelale, göl, vadi): 60-120 dk
+- Kısa manzara durağı / fotoğraf: 20-30 dk
+- Kahvaltı: 30-45 dk, Öğle yemeği: 45-60 dk, Akşam yemeği: 60-90 dk
+- Alışveriş / serbest zaman: max 60 dk — sadece gerçek çarşı/pazar adıyla eklenebilir
+
+DOLDURMA YASAĞI:
+- "Serbest Zaman" bloğunu dolgu olarak kullanma. Gerçek bir çarşı/pazar yoksa ekleme.
+- Bir yemekten hemen sonra serbest zaman ekleme.
+- Küçük şehirlerde (Bartın, Çankırı gibi) 2-3 gerçek aktivite yeterliyse zorla doldurma; gün kısa bitebilir.
+- Aynı mekanı farklı isimle tekrar listeleme (Safranbolu Çarşısı + Serbest Zaman Safranbolu Çarşısı = YASAK).
+
+GÜNLÜK AKTİVİTE AKIŞI:
+- 07:30-08:30: Yolculuk (varış ~10:00-11:00)
+- 10:00-12:30: Sabah aktiviteleri (2-3 mekan)
+- 12:30-13:30: Öğle yemeği (max 1 saat)
+- 13:30-17:30: Öğleden sonra aktiviteleri (2-3 mekan)
+- (Opsiyonel) 17:30-18:30: Çarşı/alışveriş — SADECE gerçek mekan varsa
+- 19:30-21:00: Akşam yemeği
+
 DİĞER KURALLAR:
-1. Her aktivite başlığında GERÇEK mekan adı kullan.
+1. Her aktivite başlığında GERÇEK mekan adı kullan (Google Maps'te bulunabilir olmalı).
 2. description: 1 kısa cümle (max 12 kelime).
-3. Her gün 16:00'da "Serbest Zaman & Alışveriş": gerçek çarşı/pazar/AVM adı, tag "Serbest". (Geçiş günlerinde bu blok olmayabilir.)
-4. Konaklama yapılan günlerde: ${accomOptionsRule}; her seçeneğe "reviewSummary" (max 5 kelime) ekle.
-5. Günde aktivite sayısı: 4-7 (şehir sayısına ve yol süresine göre).
-6. Tag: Kültür, Doğa, Yemek, Akşam, Aktivite, Sabah, Huzur, Keşif, Macera, Gastronomi, Premium, Serbest, Yolculuk.
-7. Yolculuk aktivitesi: title "[Önceki Şehir]'den [Mevcut Şehir]'e Yolculuk", cost "Yakıt ~₺xxx", description "~X saatlik yolculuk."
+3. Konaklama yapılan günlerde: ${accomOptionsRule}; her seçeneğe "reviewSummary" (max 5 kelime) ekle.
+4. Günde aktivite sayısı: 4-7 (şehir sayısına ve yol süresine göre).
+5. Tag: Kültür, Doğa, Yemek, Akşam, Aktivite, Sabah, Huzur, Keşif, Macera, Gastronomi, Premium, Serbest, Yolculuk.
+6. Yolculuk aktivitesi: title "[Önceki Şehir]'den [Mevcut Şehir]'e Yolculuk", cost "Yakıt ~₺xxx", description "~X saatlik yolculuk."
 ${mealRules}
 
 SADECE JSON yanıt ver (boşluk/satır sonu KULLANMA — kompakt format):
