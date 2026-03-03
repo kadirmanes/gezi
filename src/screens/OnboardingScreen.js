@@ -756,6 +756,8 @@ export default function OnboardingScreen({ navigation }) {
 
   const renderContent = () => {
     switch (step.key) {
+      case 'presets':
+        return <StepPresets onSelect={handlePresetSelect} />;
       case 'startLocation':
         return <LocationStep value={startLocation} onChange={setStartLocation} suggestions={POPULAR_STARTS} placeholder="İstanbul, Ankara, İzmir..." />;
       case 'destination':
