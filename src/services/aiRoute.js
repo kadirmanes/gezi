@@ -232,13 +232,12 @@ function buildPrompt(prefs) {
 
   const mealRules = includeMeals
     ? `YEMEK:
-- Sabah kahvaltısı (kalkıştan önce veya yolda mola olarak): tag "Yemek", kısa not yeter.
-- Öğle (varışa göre uygun saatte) ve Akşam (19:30 civarı): gerçek restoran adı, cost kişi başı, tag "Yemek".
-  Her öğle/akşam aktivitesine şunları ekle:
-    "reviewSummary": ziyaretçi yorumlarına göre öne çıkan 1 özellik (max 10 kelime),
-    "alternatives": 2 alternatif restoran [{"name","address","cost","reviewSummary"}].`
+- Sabah: tag "Yemek", kısa not yeter.
+- Öğle: gerçek restoran, cost kişi başı, tag "Yemek", "reviewSummary" (max 5 kelime).
+- Akşam (19:30): gerçek restoran, cost, tag "Yemek", "reviewSummary" (max 5 kelime),
+  "alternatives":[{"name":"...","cost":"...","reviewSummary":"..."}] (2 alternatif, sadece bu 3 alan).`
     : `YEMEK:
-- Öğle ve akşam: tag "Yemek", gerçek restoran adı, "reviewSummary" ekle (max 10 kelime).`;
+- Öğle ve akşam: tag "Yemek", gerçek restoran adı, "reviewSummary" (max 5 kelime).`;
 
   return `Sen Türkiye ve Avrupa seyahatlerini çok iyi bilen bir rehbersin.
 
@@ -254,15 +253,15 @@ DİĞER KURALLAR:
 1. Her aktivite başlığında GERÇEK mekan adı kullan.
 2. description: 1 kısa cümle (max 12 kelime).
 3. Her gün 16:00'da "Serbest Zaman & Alışveriş": gerçek çarşı/pazar/AVM adı, tag "Serbest". (Geçiş günlerinde bu blok olmayabilir.)
-4. Konaklama yapılan günlerde: ${accomOptionsRule}; her seçeneğe kısa "reviewSummary" ekle.
+4. Konaklama yapılan günlerde: ${accomOptionsRule}; her seçeneğe "reviewSummary" (max 5 kelime) ekle.
 5. Günde aktivite sayısı: 4-7 (şehir sayısına ve yol süresine göre).
 6. Tag: Kültür, Doğa, Yemek, Akşam, Aktivite, Sabah, Huzur, Keşif, Macera, Gastronomi, Premium, Serbest, Yolculuk.
 7. Yolculuk aktivitesi: title "[Önceki Şehir]'den [Mevcut Şehir]'e Yolculuk", cost "Yakıt ~₺xxx", description "~X saatlik yolculuk."
 ${mealRules}
 
-SADECE JSON yanıt ver:
+SADECE JSON yanıt ver (boşluk/satır sonu KULLANMA — kompakt format):
 
-{"route":[{"day":1,"location":"GeceKalınanŞehir","lat":39.9,"lng":32.8,"activities":[{"time":"08:00","title":"[Çıkış]'dan [Şehir]'e Yolculuk","tag":"Yolculuk","cost":"Yakıt ~₺150","description":"~2 saatlik yolculuk.","address":""},{"time":"10:30","title":"Mekan Adı","tag":"Kültür","cost":"Ücretsiz","description":"1 cümle.","address":"Semt"},{"time":"13:00","title":"Restoran Adı","tag":"Yemek","cost":"₺150/kişi","description":"Yöresel lezzetler.","address":"Semt","reviewSummary":"Kuzu tandırı ve mezeler övülüyor.","alternatives":[{"name":"Alt Restoran 1","address":"Semt","cost":"₺120/kişi","reviewSummary":"Deniz ürünleri tazeliğiyle ünlü."},{"name":"Alt Restoran 2","address":"Semt","cost":"₺90/kişi","reviewSummary":"Uygun fiyatlı, vejetaryen seçenekler var."}]}],"accommodationOptions":[{"type":"kamp","name":"Kamp Adı 1","address":"Semt","cost":"₺xx/gece","facilities":"Elektrik, Duş","reviewSummary":"Temizliği ve doğal ortamı çok beğeniliyor."},{"type":"kamp","name":"Kamp Adı 2","address":"Semt","cost":"₺xx/gece","facilities":"WiFi, Duş","reviewSummary":"Personel yardımsever, tesis bakımlı."},{"type":"kamp","name":"Kamp Adı 3","address":"Semt","cost":"₺xx/gece","facilities":"Havuz, Market","reviewSummary":"Geniş alan, çocuklar için ideal."}]}]}`;
+{"route":[{"day":1,"location":"Şehir","lat":39.9,"lng":32.8,"activities":[{"time":"08:00","title":"X'dan Y'ye Yolculuk","tag":"Yolculuk","cost":"Yakıt ~₺150","description":"~2 saatlik yolculuk.","address":""},{"time":"10:30","title":"Mekan","tag":"Kültür","cost":"Ücretsiz","description":"1 cümle.","address":"Semt"},{"time":"13:00","title":"Restoran","tag":"Yemek","cost":"₺150/kişi","description":"Yöresel.","address":"Semt","reviewSummary":"Tandır övülüyor."},{"time":"19:30","title":"Akşam Restoranı","tag":"Yemek","cost":"₺200/kişi","description":"Lezzetli.","address":"Semt","reviewSummary":"Meze seçkisi harika.","alternatives":[{"name":"Alt1","cost":"₺120","reviewSummary":"Deniz ürünleri"},{"name":"Alt2","cost":"₺90","reviewSummary":"Vejetaryen seçenekler"}]}],"accommodationOptions":[{"type":"kamp","name":"Kamp1","address":"Semt","cost":"₺xx/gece","facilities":"Elektrik,Duş","reviewSummary":"Temiz, doğal."},{"type":"kamp","name":"Kamp2","address":"Semt","cost":"₺xx/gece","facilities":"WiFi,Duş","reviewSummary":"Personel ilgili."},{"type":"kamp","name":"Kamp3","address":"Semt","cost":"₺xx/gece","facilities":"Havuz","reviewSummary":"Geniş alan."}]}]}`;
 }
 
 // ─── JSON extractor ───────────────────────────────────────────────────────
@@ -290,16 +289,16 @@ export async function generateCityList(preferences, apiKey, onProgress) {
   onProgress?.('Güzergah planlanıyor...');
 
   const { startLocation, destination, days } = preferences;
-  const prompt = `${startLocation}'dan ${destination}'a ${days} günlük bir tatil planla.
+  const prompt = `${startLocation}'dan ${destination}'a ${days} günlük tatil planla.
 
-Her şehire turistik değerine göre uygun süre ver — Çankırı gibi az gezilecek şehirlerde 2-3 saat yeterli, geçip devam edilmeli. Ankara, Kapadokya, Antalya gibi büyük yerler için tam gün veya üzeri.
+Her şehire turistik değerine göre süre ver — Çankırı gibi yerlerde 2-3 saat yeterli, Kapadokya/Antalya gibi yerlerde tam gün.
 - 2-4 saat: geçiş durağı (isStopover: true)
 - 5-10 saat: konaklama (isStopover: false)
 
-Toplam ${days} gecelik plan yap. ${startLocation} dahil etme (orası çıkış noktası). Her günün sonunda bir geceleme şehri olsun.
+Toplam ${days} geceleme olsun. ${startLocation} dahil etme.
 
-SADECE JSON:
-{"dayPlan":[{"day":1,"overnightCity":"ŞehirAdı","stops":[{"city":"ŞehirAdı","hours":3,"isStopover":true},{"city":"ŞehirAdı","hours":7,"isStopover":false}]},{"day":2,"overnightCity":"ŞehirAdı","stops":[{"city":"ŞehirAdı","hours":8,"isStopover":false}]}]}`;
+COMPACT JSON (boşluk/satır sonu kullanma):
+{"dayPlan":[{"day":1,"overnightCity":"A","stops":[{"city":"X","hours":3,"isStopover":true},{"city":"A","hours":7,"isStopover":false}]},{"day":2,"overnightCity":"B","stops":[{"city":"B","hours":8,"isStopover":false}]}]}`;
 
   const response = await fetch(ANTHROPIC_URL, {
     method: 'POST',
@@ -310,7 +309,7 @@ SADECE JSON:
     },
     body: JSON.stringify({
       model:      MODEL,
-      max_tokens: 2048,
+      max_tokens: 4096,
       messages:   [{ role: 'user', content: prompt }],
     }),
   });
