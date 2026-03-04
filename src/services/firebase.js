@@ -7,13 +7,12 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 // Replace these values with your actual Firebase project config from:
 // Firebase Console → Project Settings → General → Your Apps → Firebase SDK snippet
 const firebaseConfig = {
-  apiKey: 'AIzaSyPLACEHOLDER_REPLACE_WITH_YOUR_API_KEY',
-  authDomain: 'squadup-app.firebaseapp.com',
-  projectId: 'squadup-app',
-  storageBucket: 'squadup-app.appspot.com',
-  messagingSenderId: '123456789012',
-  appId: '1:123456789012:web:abcdef1234567890abcdef',
-  measurementId: 'G-XXXXXXXXXX',
+  apiKey: 'AIzaSyD5VhccfEas7nnVs54oTTcPhOpsCP7-nzI',
+  authDomain: 'squadup-7210c.firebaseapp.com',
+  projectId: 'squadup-7210c',
+  storageBucket: 'squadup-7210c.firebasestorage.app',
+  messagingSenderId: '142962124885',
+  appId: '1:142962124885:web:6d176e51b3adce8a534cdc',
 };
 
 let app;
