@@ -19,8 +19,12 @@ try {
   auth = initializeAuth(app, {
     persistence: getReactNativePersistence(AsyncStorage),
   });
-} catch {
-  auth = getAuth(app);
+} catch (e) {
+  try {
+    auth = getAuth(app);
+  } catch (e2) {
+    console.error('[Firebase] Auth init failed:', e.message, e2.message);
+  }
 }
 
 const db = getFirestore(app);
